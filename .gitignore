@@ -1,0 +1,20 @@
+# Byte-compiled / optimised / DLL files
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Generated media
+
+*.png
+*.gif
+*.pickle
+*.txt
+
+# Dataset extensions
+
+*.dat
+
+# Unnecessary directories
+
+fail/
