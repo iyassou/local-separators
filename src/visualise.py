@@ -432,7 +432,7 @@ def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutver
     for local_cutvertex in local_cutvertices:
         # Bound variables locally.
         v: Vertex = local_cutvertex.vertex
-        r: Union[int, float] = local_cutvertex.locality
+        r: int = local_cutvertex.locality
         # Create PNG filename.
         png: Path = graph_media_folder / png_template.format(v=v, r=r)
         # If we're not overwriting then skip.
@@ -487,7 +487,7 @@ def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutver
         ax.set_xlim((min_x, max_x))
         ax.set_ylim((min_y, max_y))
 
-def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[Vertex, int], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, split_vertex_style: NodeStyle=None, non_split_vertex_style: NodeStyle=None, split_edge_style: EdgeStyle=None, non_split_edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
+def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: List[LocalCutvertex], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, split_vertex_style: NodeStyle=None, non_split_vertex_style: NodeStyle=None, split_edge_style: EdgeStyle=None, non_split_edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
     '''
         Draws G with special care to its split vertices, if present.
 
@@ -496,8 +496,8 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[V
         G: nx.Graph
         layout: callable
             A function which maps vertices to their Cartesian coordinates.
-        local_cutvertices: Dict[Vertex, int]
-            A mapping of local cutvertices to their respective radii.
+        local_cutvertices: List[LocalCutvertex]
+            A list of local cutvertices.
         data_axis_fudge: float, optional
             Percentage expressed as a float between 0 (exclusive) and 1
             (inclusive). The bounding box around the points generated
@@ -568,11 +568,14 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[V
     # If we're not overwriting then stop.
     if not overwrite and png.exists():
         return
-    
+    # Create a list of the vertices and their associated radii.
+    vertices: List[Vertex] = []
+    radii: List[int] = []
+    for local_cutvertex in local_cutvertices:
+        vertices.append(local_cutvertex.vertex)
+        radii.append(local_cutvertex.locality)
     # Split the graph at its local cutvertices.
-    vertices: List[Vertex] = list(local_cutvertices.keys())
-    radii: List[int] = [local_cutvertices[v] for v in vertices]
-    H: nx.Graph = split_at_vertices(G, vertices, radii, inplace=False)
+    H: nx.Graph = split_at_vertices(G, local_cutvertices, inplace=False)
     # Obtain the layout.
     pos_G: Dict[Vertex, Point2d] = layout(G)
     pos_H: Dict[Vertex, Point2d] = layout(H)
@@ -636,10 +639,8 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[V
     split_edges, non_split_edges = [], []
     for edge in H.edges():
         (
-            split_edges
-            if any(getattr(v, 'split', False) for v in edge)
-            else
-            non_split_edges
+            split_edges if any(getattr(v, 'split', False) for v in edge)
+            else non_split_edges
         ).append(edge)
     ## Draw the split edges.
     nx.draw_networkx_edges(H, pos_H, edgelist=split_edges, ax=ax, **split_edge_style.asdict())
