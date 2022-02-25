@@ -41,13 +41,13 @@ class LocalCutvertex(NamedTuple):
 
         vertex: Vertex
             The vertex in question, i.e. its identifier in the graph G.
-        locality: Union[int, float]
+        locality: int
             The locality of the local cutvertex.
         edge_partition: Set[Tuple[Vertex, ...]]
             Partition of :math:`E_G(v)` according to the components of :math:`B_{\frac{r}{2})(v)-v`.
     '''
     vertex: Vertex
-    locality: Union[int, float]
+    locality: int
     edge_partition: Set[Tuple[Vertex, ...]]
 
 def ball(G: nx.Graph, v: Vertex, r: Union[int, float]) -> nx.Graph:
