@@ -143,22 +143,21 @@ def is_local_cutvertex(G: nx.Graph, v: Vertex, r: int) -> bool:
     # Is the ball disconnected?
     return not nx.algorithms.components.is_connected(B)
 
-def find_local_cutvertices(G: nx.Graph, max_radius: int=None, min_radius: int=3) -> List[LocalCutvertex]:
+def find_local_cutvertices(G: nx.Graph, min_radius: int=3) -> List[LocalCutvertex]:
     '''
         Iterates through graph vertices and detects r-local cutvertices. This algorithm has
-        time complexity :math:`O(n\cdot\log(\text{max_radius}))` where :math:`n` is the
-        number of vertices.
+        time complexity :math:`O(n\cdot\log(k))` where :math:`n` is the number of vertices,
+        and :math:`k` is the size of the largest component of :math:`G`.
 
         Parameters
         ----------
         G: nx.Graph
-        max_radius: int, default None
         min_radius: int, default 3
 
         Notes
         -----
-        If max_radius is None, it's taken to be the number of vertices in the connected component
-        associated to the vertex under consideration in the loop.
+        The maximum radius in the binary search is taken to be the number of vertices in the connected
+        component of the vertex under consideration in the search loop.
         The value of r associated with a vertex is the maximal value of r for which that vertex
         is an r-local cutvertex.
         Since ":math:`v` an :math:`(r+1)`-local cutvertex" :math:`\implies` ":math:`v` an :math:`r`-local cutvertex",
@@ -174,82 +173,61 @@ def find_local_cutvertices(G: nx.Graph, max_radius: int=None, min_radius: int=3)
     # To determine if a vertex is indeed a local separator and not a component-level
     # separator, we'll need the connected components in the graph.
     components: List[Set[Vertex]] = list(nx.connected_components(G))
-    # Further, if the maximum radius is unspecified, we'll be using the number of
-    # vertices in the component of a vertex as a healthy upper bound.
-    max_radius_is_None: bool = max_radius is None
-    if not max_radius_is_None and min_radius > max_radius:
-        raise ValueError(f'min_radius {min_radius} > max_radius {max_radius}')
     # Prepare the return value list.
     local_cutvertices: List[LocalCutvertex] = []
     # Iterate through each vertex in the graph.
     for v in G.nodes:
-        # Prepare the binary search.
+        # Prepare the binary search bounds.
         mi: int = min_radius
-        if max_radius_is_None:
-            ma: int = len(next(comp for comp in components if v in comp))
-            if mi > ma:
-                # This can occur is there are fewer vertices in the
-                # component v belongs to than expected. In this case,
-                # the radius we would potentially determine for v is
-                # not of interest, given that it would be smaller than
-                # min_radius, hence we should move onto the next vertex.
-                continue
-        else:
-            ma: int = max_radius
+        component: Set[Vertex] = next(comp for comp in components if v in comp)
+        ma: int = len(component)
+        if mi > ma:
+            # This can occur is there are fewer vertices in the
+            # component v belongs to than expected. In this case,
+            # the radius we would potentially determine for v is
+            # not of interest, given that it would be smaller than
+            # min_radius, hence we should move onto the next vertex.
+            continue
         mid: int = None
         v_is_a_local_cutvertex: bool = None
         # Proceed with the binary search.
         while True:
             ### Update the current radius.
             if ma - mi == 1 and v_is_a_local_cutvertex is not None:
-                # One of either the mi or ma value at the previous iteration of
+                # One of either the mi or ma values at the previous iteration of
                 # this algorithm was already tried, in which case the typical
                 # process of computing a new value of mid would create an infinite
                 # loop, hence the intervention for this special case.
-                # The intervention consists of setting mid to either of the values
-                # that wasn't tried at the previous iteration, so
-                #                   mid = mi OR ma
-                # and setting
-                #                   mi = ma
-                # in order to break out of the infinite loop.
                 if not v_is_a_local_cutvertex:
-                    # ma corresponds to the previously tried value, hence mid = mi
+                    # GUARANTEES:       - ma corresponds to the previously tried value.
+                    #                   - v IS NOT a ma-local cutvertex.
+                    # PLAN OF ACTION:   Determine if v is a mi-local cutvertex.
+                    #                   Update mid = mi, regardless of whether v is
+                    #                   a mid-local cutvertex.
+                    v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, mi)
                     mid: int = mi
-                    # Setting ma == mi here guarantees termination of this branch since
-                    # after the "if mi == ma" check we would have determined whether v
-                    # is a mid-local cutvertex or not.
-                    ma: int = mi
+                    break
                 else:
-                    # mi corresponds to the previously tried value, hence mid = ma
-                    mid: int = ma
-                    # mi was the previously tried value, and we know that for mid = mi
-                    # i.e. the last iteration, v is a mid-local cutvertex. Now the question
-                    # is: can we do better? Could v be a ma-local cutvertex?
-
-                    # If it isn't, the algorithm should stop and report back the value of
-                    # mi, since v was a mi-local cutvertex. This is achieved by currently
-                    # setting:
-                    #                           mid = ma_prev
-                    # and leaving:
-                    #           mi = mi_prev                    ma = ma_prev
-                    # as on the next iteration, either v is a ma_prev-local cutvertex, in which
-                    # case we'd set:
-                    #                        mi = mid = ma_prev
-                    # and on the next iteration the mi == ma check would be True since we'd
-                    # have:
-                    #           mi (= mid = ma_prev) == ma (= ma_prev)
-                    # and the algorithm terminates, or if v isn't a ma_prev-local cutvertex,
-                    # we'd set:
-                    #                       ma = mid = ma_prev
-                    # 
-
-                    # Alternatively, if v is a ma-local cutvertex, then 
+                    # GUARANTEES:       - mi corresponds to the previously tried value.
+                    #                   - v IS a mi-local cutvertex.
+                    # PLAN OF ACTION:   Determine if v is a ma-local cutvertex.
+                    #
+                    #                   If v is a ma-local cutvertex, then update mid = ma.
+                    #
+                    #                   If v is not a ma-local cutvertex, then let mid stay
+                    #                   as mi, and revert v_is_a_local_cutvertex to True.
+                    v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, ma)
+                    if v_is_a_local_cutvertex:
+                        mid: int = ma
+                    else:
+                        v_is_a_local_cutvertex: bool = True
+                    break
             else:
                 # Since is_local_cutvertex only accepts integers we're taking the floor.
                 mid: int = mi + floor((ma - mi) / 2)
             ### Check if v is mid-local cutvertex.
             v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, mid)
-            ### Check if we should break out of the loop.
+            ### Check if the search bounds have crossed.
             if mi == ma:
                 break
             ### Update the binary search boundaries otherwise.
@@ -265,10 +243,8 @@ def find_local_cutvertices(G: nx.Graph, max_radius: int=None, min_radius: int=3)
         # End of the binary search. Is v a genuine mid-local cutvertex (i.e.
         # v is a mid-local separator that doesn't separate its component)?
         if v_is_a_local_cutvertex:
-            print(v, f'is a potential {mid}-local cutvertex')
-            component_vertices: Set[Vertex] = next(comp for comp in components if v in comp)
             component_without_v: nx.Graph = nx.classes.graphviews.subgraph_view(
-                G, filter_node=lambda x: x in component_vertices and x != v
+                G, filter_node=lambda x: x in component and x != v
             )
             # Run the component connectedness check.
             if nx.algorithms.components.is_connected(component_without_v):
