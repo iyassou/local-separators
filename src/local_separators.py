@@ -28,27 +28,26 @@ NAMING_CONVENTION_REGEX = re.compile(r'[A-Za-z0-9]+\_{[\d]+}')
 
 class LocalCutvertex(NamedTuple):
     '''
-        Given a graph :math:`G` and :math:`r\in\mathbb{N}\cup\left\lbrace\infty\right\rbrace`,
-        math:`v\in V(G)` is an :math:`r`-local cutvertex if the ball of radius :math:`\frac{r}{2}` with :math:`v` removed is
-        disconnected.
+        Given a graph :math:`G` and :math:`r\in\mathbb{N}\cup\left\lbrace\infty\right\rbrace`, math:`v\in V(G)` is an
+        :math:`r`-local cutvertex if the ball of radius :math:`\frac{r}{2}` with :math:`v` removed is disconnected.
 
         If :math:`v` is a local cutvertex, then :math:`B_{\frac{r}{2}}(v)-v` contains :math:`c>1` components, and so
-        :math:`B_{\frac{r}{2}}(v)` contains edges going from :math:`v` to the vertices in these :math:`c` components, effectively
-        forming a partition of :math:`E_G(v)` in :math:`G`.
+        :math:`B_{\frac{r}{2}}(v)` contains edges going from :math:`v` to the vertices in these :math:`c` components,
+        effectively forming a partition of :math:`E_G(v)` in :math:`G`.
         
-        We keep track of this edge-partition as well as the radius so as to enable splitting at a local cutvertex, an operation
-        detailed below. Note that we only need to store :math:`u\in V(G)` for :math:`uv\in E_G(v)` since it is implicit that the
-        edge's other end is in fact :math:`v`.
+        We keep track of this edge-partition as well as the radius so as to enable splitting at a local cutvertex, an
+        operation detailed below. Note that we only need to store :math:`u\in V(G)` for :math:`uv\in E_G(v)` since it
+        is implicit that the edge's other end is in fact :math:`v`.
 
         vertex: Vertex
             The vertex in question, i.e. its identifier in the graph G.
-        radius: Union[int, float]
+        locality: Union[int, float]
             The locality of the local cutvertex.
         edge_partition: List[Tuple[Vertex, ...]]
             Partition of :math:`E_G(v)` according to the components of :math:`B_{\frac{r}{2})(v)-v`.
     '''
     vertex: Vertex
-    radius: Union[int, float]
+    locality: Union[int, float]
     edge_partition: List[Tuple[Vertex, ...]]
 
 def ball(G: nx.Graph, v: Vertex, r: Union[int, float]) -> nx.Graph:
@@ -143,7 +142,7 @@ def is_local_cutvertex(G: nx.Graph, v: Vertex, r: int) -> bool:
     # Is the ball disconnected?
     return not nx.algorithms.components.is_connected(B)
 
-def find_local_cutvertices(G: nx.Graph, min_radius: int=3) -> List[LocalCutvertex]:
+def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutvertex]:
     '''
         Iterates through graph vertices and detects r-local cutvertices. This algorithm has
         time complexity :math:`O(n\cdot\log(k))` where :math:`n` is the number of vertices,
@@ -152,7 +151,7 @@ def find_local_cutvertices(G: nx.Graph, min_radius: int=3) -> List[LocalCutverte
         Parameters
         ----------
         G: nx.Graph
-        min_radius: int, default 3
+        min_locality: int, default 3
 
         Notes
         -----
@@ -178,7 +177,7 @@ def find_local_cutvertices(G: nx.Graph, min_radius: int=3) -> List[LocalCutverte
     # Iterate through each vertex in the graph.
     for v in G.nodes:
         # Prepare the binary search bounds.
-        mi: int = min_radius
+        mi: int = min_locality
         component: Set[Vertex] = next(comp for comp in components if v in comp)
         ma: int = len(component)
         if mi > ma:
@@ -243,11 +242,14 @@ def find_local_cutvertices(G: nx.Graph, min_radius: int=3) -> List[LocalCutverte
         # End of the binary search. Is v a genuine mid-local cutvertex (i.e.
         # v is a mid-local separator that doesn't separate its component)?
         if v_is_a_local_cutvertex:
+            print(v, f'is a potential {mid}-local cutvertex in G')
             component_without_v: nx.Graph = nx.classes.graphviews.subgraph_view(
                 G, filter_node=lambda x: x in component and x != v
             )
             # Run the component connectedness check.
             if nx.algorithms.components.is_connected(component_without_v):
+                print(v, f'is a genuine {mid}-local cutvertex in G')
+                print("v's component:", component)
                 # v does not separate its component, hence it's a genuine local separator.
 
                 # Before appending v to the list of local cutvertices we need to obtain the
@@ -269,7 +271,7 @@ def find_local_cutvertices(G: nx.Graph, min_radius: int=3) -> List[LocalCutverte
 
                 # Add LocalCutvertex v to the list of local cutvertices.
                 local_cutvertices.append(
-                    LocalCutvertex(vertex=v, radius=mid, edge_partition=edge_partition)
+                    LocalCutvertex(vertex=v, locality=mid, edge_partition=edge_partition)
                 )
     # Done iterating over the vertices.
     return local_cutvertices
