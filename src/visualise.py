@@ -22,6 +22,7 @@ from .local_separators import (
     ball,
     split_at_vertices,
     Vertex,
+    LocalCutvertex,
 )
 from .utils import (
     Point2d,
@@ -329,7 +330,7 @@ def draw_graph(G: nx.Graph, pos: Dict[Vertex, Point2d], data_axis_fudge: float=N
     # Save PNG.
     plt.savefig(png, dpi=dpi)
 
-def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutvertices: Dict[Vertex, int], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, local_cutvertex_style: NodeStyle=None, ball_vertex_style: NodeStyle=None, node_style: NodeStyle=None, ball_edge_style: EdgeStyle=None, edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
+def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutvertices: List[LocalCutvertex], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, local_cutvertex_style: NodeStyle=None, ball_vertex_style: NodeStyle=None, node_style: NodeStyle=None, ball_edge_style: EdgeStyle=None, edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
     '''
         Draws the supplied local cutvertices on G.
 
@@ -338,8 +339,8 @@ def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutver
         G: nx.Graph
         pos: Dict[Vertex, Point2d]
             A mapping of vertices to their Cartesian coordinates.
-        local_cutvertices: Dict[Vertex, int]
-            A mapping of local cutvertices to their respective radii.
+        local_cutvertices: List[LocalCutvertex]
+            A list of local cutvertices.
         data_axis_fudge: float, optional
             Percentage expressed as a float between 0 (exclusive) and 1
             (inclusive). The bounding box around the points generated
@@ -428,7 +429,10 @@ def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutver
     min_marker_size: float = max(min(node_size), 2)
     ball_node_marker_size: float = max(min_marker_size, 20)
     # Draw the local cutvertices.
-    for v, r in local_cutvertices.items():
+    for local_cutvertex in local_cutvertices:
+        # Bound variables locally.
+        v: Vertex = local_cutvertex.vertex
+        r: Union[int, float] = local_cutvertex.locality
         # Create PNG filename.
         png: Path = graph_media_folder / png_template.format(v=v, r=r)
         # If we're not overwriting then skip.
