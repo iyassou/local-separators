@@ -43,12 +43,12 @@ class LocalCutvertex(NamedTuple):
             The vertex in question, i.e. its identifier in the graph G.
         locality: Union[int, float]
             The locality of the local cutvertex.
-        edge_partition: List[Tuple[Vertex, ...]]
+        edge_partition: Set[Tuple[Vertex, ...]]
             Partition of :math:`E_G(v)` according to the components of :math:`B_{\frac{r}{2})(v)-v`.
     '''
     vertex: Vertex
     locality: Union[int, float]
-    edge_partition: List[Tuple[Vertex, ...]]
+    edge_partition: Set[Tuple[Vertex, ...]]
 
 def ball(G: nx.Graph, v: Vertex, r: Union[int, float]) -> nx.Graph:
     '''
@@ -242,14 +242,11 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
         # End of the binary search. Is v a genuine mid-local cutvertex (i.e.
         # v is a mid-local separator that doesn't separate its component)?
         if v_is_a_local_cutvertex:
-            print(v, f'is a potential {mid}-local cutvertex in G')
             component_without_v: nx.Graph = nx.classes.graphviews.subgraph_view(
                 G, filter_node=lambda x: x in component and x != v
             )
             # Run the component connectedness check.
             if nx.algorithms.components.is_connected(component_without_v):
-                print(v, f'is a genuine {mid}-local cutvertex in G')
-                print("v's component:", component)
                 # v does not separate its component, hence it's a genuine local separator.
 
                 # Before appending v to the list of local cutvertices we need to obtain the
@@ -265,9 +262,9 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
                 neighbourhood: Set[Vertex] = set(G.neighbors(v))
                 # Step 4: Obtain the intersections of the neighbourhood of v in G with
                 #         the components of the punctured ball.
-                edge_partition: List[Tuple[Vertex, ...]] = [
+                edge_partition: Set[Tuple[Vertex, ...]] = set(
                     tuple(neighbourhood.intersection(comp)) for comp in punctured_ball_components
-                ]
+                )
 
                 # Add LocalCutvertex v to the list of local cutvertices.
                 local_cutvertices.append(
