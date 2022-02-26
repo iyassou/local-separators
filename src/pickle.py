@@ -16,6 +16,7 @@ from .datasets import (
 from .local_separators import (
     find_local_cutvertices,
     Vertex,
+    LocalCutvertex,
 )
 
 from pathlib import Path
@@ -53,7 +54,7 @@ def pickle_local_separators(G: nx.Graph, overwrite: bool=False):
     if graph_pickle.exists() and graph_pickle.stat().st_size and not overwrite:
         return
     ### Compute local cutvertices.
-    local_cutvertices: Dict[Vertex, int] = find_local_cutvertices(G)
+    local_cutvertices: List[LocalCutvertex] = find_local_cutvertices(G)
     ### Make sure parent folder exists.
     graph_pickle.parent.mkdir(parents=True, exist_ok=True)
     ### Serialise result.
