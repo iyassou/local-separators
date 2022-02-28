@@ -297,7 +297,7 @@ def _split_naming_convention(v: Vertex, identifier: int) -> str:
     '''
     return f'${str(v).replace("$", "")}_{{{str(identifier)}}}$'
 
-def split_at_vertices(G: nx.Graph, v: Union[Vertex, List[Vertex]], r: Union[int, List[int]], inplace: bool=False) -> Optional[nx.Graph]:
+def split_at_local_cutvertices(G: nx.Graph, local_cutvertices: List[LocalCutvertex], inplace: bool=False) -> Optional[nx.Graph]:
     '''
         Splits a vertex v in a graph and numbers the split vertices by the components of
         the ball of radius r/2 with the vertex v removed.
@@ -305,24 +305,29 @@ def split_at_vertices(G: nx.Graph, v: Union[Vertex, List[Vertex]], r: Union[int,
         Parameters
         ----------
         G: nx.Graph
-        v: Union[Vertex, List[Vertex]]
-            The vertex or vertices to split at.
-        r: Union[int, List[int]]
-            The radius or radii associated to the vertex or vertices to split at.
+        local_cutvertices: List[LocalCutvertices]
+            The list of local cutvertices to split at.
         inplace: bool, default False
             Whether or not this operation should be done in place. If False, a copy
             of the original graph is operated on and returned at the end.
         
         Notes
         -----
-        Splitting at a vertex with a radius r equates to supplying the components of the
-        ball of radius r/2 around v with v removed with unique copies of the vertex, and
-        subsequently adding edges between v and its numbered copies.
-        The aforementioned components are supplemented with 'local component tags',
-        which at the moment are just integers, but can be anything else (think names).
-        These local component tags allow the visualisation function to distinguish the
-        local components when rendering the graph, in order to actually demonstrate
-        structural insight into the local cutvertex.
+        Splitting at a vertex :math:`v` with a radius :math:`r` equates to supplying the
+        components of the :math:`B_{\frac{r}{2}}(v)-v` with unique copies of the vertex, and
+        subsequently adding edges between :math:`v` and its numbered copies.
+
+        Although this is correct and not error-prone for splitting at a single local cutvertex,
+        obtaining the punctured balls while also introducing split vertices as we split at
+        multiple local cutvertices is error-prone, as the introduction of the split vertices
+        would modify the underlying graph.
+        Specifically, an issue that can arise is if a local cutvertex :math:`v` is in the
+        punctured ball of another local cutvertex :math:`w`, then splitting at :math:`v` first
+        would modify the ball we'd obtain around :math:`w` because of the newly introduced
+        split vertices.
+        To remedy this, we instead introduce split vertices by operating on the edge-partition
+        of each local cutvertex, which is a standalone approach in that it doesn't affect the
+        other local cutvertices.
 
         The split vertices are given names according to _split_naming_convention, where
         identifier is an increasing integer index, starting at 1.
@@ -333,76 +338,41 @@ def split_at_vertices(G: nx.Graph, v: Union[Vertex, List[Vertex]], r: Union[int,
         Optional[nx.Graph]
             A graph is returned if the operation isn't done in place.
     '''
-    # Make sure the vertex and radius arguments are lists of appropriate lengths.
-    if not isinstance(v, list):
-        v: List[Vertex] = [v]
-    if not isinstance(r, list):
-        r: List[int] = [r]
-    if len(v) != len(r):
-        diff = len(v) - len(r)
-        excessive = 'vertices' if diff > 0 else 'radii'
-        raise ValueError(f'received an excess of {abs(diff)} {excessive}')
     # Which graph are we operating on?
     if not inplace:
         graph: nx.Graph = G.copy()
     else:
         graph: nx.Graph = G
-    # Obtain the balls of radius r/2 around v, with v removed.
-    balls: List[nx.Graph] = [
-        nx.classes.graphviews.subgraph_view(
-            ball(graph, vertex, radius/2), filter_node=lambda x: x != vertex
-        ) for vertex, radius in zip(v, r)
-    ]
-    # Obtain the components of each ball.
-    components: List[List[Set[Vertex]]] = [list(nx.connected_components(b)) for b in balls]
-    # Construct the edges to the split vertices.
-    split_edges: List[Tuple[Vertex, Vertex]] = []
-    vertex: Vertex
-    comps: List[Set[Vertex]]
-    component_tag: int = 1
-    component_tag_attrs: Dict[Vertex, Set[int]] = {}
-    for vertex, comps in zip(v, components):
-        ### vertex is the vertex I'm splitting at, comps are the components
-        ### that result from removing vertex from the ball of radius r/2
-        ### around vertex.
-        # Begin by tagging the "local" components i.e. those that arise from removing
-        # vertex from the ball of radius r/2 around vertex in graph.
-        comp: Set[Vertex]
-        for i, comp in enumerate(comps):
-            for node in comp:
-                tags: Set[int] = component_tag_attrs.get(node, set())
-                tags.add(component_tag + i)
-                component_tag_attrs[node] = tags
-        component_tag += len(comps)
-        ### Move on to handling the split vertices.
-        # Obtain the neighbourhood of vertex.
-        neighbourhood_of_vertex: Set[Vertex] = set(graph.neighbors(vertex))
-        # Obtain the intersection of the neighbourhood of vertex and each component.
-        component_neighbourhoods: List[Set[Vertex]] = [
-            neighbourhood_of_vertex.intersection(comp) for comp in comps
-        ]
-        # Construct the edges from split vertices to components of the ball
-        # of radius r/2 around vertex with vertex removed, and then add them.
-        split_edges.extend(
-            (neighbour, _split_naming_convention(vertex, i+1))
-            for i, neighbourhood in enumerate(component_neighbourhoods)
-            for neighbour in neighbourhood
-        )
-        # Remove the edges indicent to vertex by removing vertex altogether.
-        graph.remove_node(vertex)
-        # Construct the edges from split vertices to vertex.
-        split_edges.extend(
-            (vertex, _split_naming_convention(vertex, i+1))
-            for i in range(len(component_neighbourhoods))
-        )
-    graph.graph['local_component_tags'] = component_tag
-    # Add the edges to split vertices.
-    graph.add_edges_from(split_edges)
+    # Construct the dictionary that will give each split vertex the 'split' attribute.
+    attr: Dict[Vertex, bool] = dict()
+    # Keep a set of all available local cutvertices.
+    lcv_vertices: Set[Vertex] = set(lcv.vertex for lcv in local_cutvertices)
+    # Construct the split vertices using the edge-partition.
+    lcv: LocalCutvertex
+    for lcv in local_cutvertices:
+        # Go through the subsets in the edge-partition.
+        subset: Tuple[Vertex, ...]
+        for i, subset in enumerate(lcv.edge_partition):
+            # Modify the subset to exclude other local cutvertices.
+            subset = tuple(vertex for vertex in subset if vertex not in lcv_vertices)
+            if not subset:
+                continue
+            # Create the split vertex first.
+            split_vertex: Vertex = _split_naming_convention(lcv.vertex, i+1)
+            # We want to remove the edges from the local cutvertex to the vertices in this subset,
+            graph.remove_edges_from(
+                (lcv.vertex, neighbour) for neighbour in subset
+            )
+            # and add edges to the split vertex, named using _split_naming_convention,
+            graph.add_edges_from(
+                (neighbour, split_vertex) for neighbour in subset
+            )
+            # before finally adding the edge from the split vertex to the local cutvertex.
+            graph.add_edge(split_vertex, lcv.vertex)
+            # Modify the split vertex attribute.
+            attr[split_vertex] = True
     # Distinguish the split vertices.
-    attrs: Dict[Vertex, int] = {split_vertex: True for _, split_vertex in split_edges}
-    nx.set_node_attributes(graph, attrs, name='split')
-    # Distinguish the "local" components.
-    nx.set_node_attributes(graph, component_tag_attrs, name='local_component_tag')
+    nx.set_node_attributes(graph, attr, name='split')
     # Return the graph if necessary.
     if not inplace:
         return graph
