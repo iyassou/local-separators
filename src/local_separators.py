@@ -103,6 +103,10 @@ def ball(G: nx.Graph, v: Vertex, r: Union[int, float]) -> nx.Graph:
         # If the end of an edge isn't in the dictionary of shortest paths from
         # v that have length at most r, then we can't keep that end, and hence
         # cannot keep the edge.
+        if not G.has_edge(x, y):
+            # The ball is an induced subgraph, hence if the edge isn't present
+            # in the original graph, don't keep it.
+            return False
         try:
             d_vx = len(d[x]) - 1
             d_vy = len(d[y]) - 1
