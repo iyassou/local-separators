@@ -137,6 +137,7 @@ def is_local_cutvertex(G: nx.Graph, v: Vertex, r: int) -> bool:
 
         Returns
         -------
+        bool
     '''
     # Obtain the ball of radius r/2 centered at v in G.
     # Remove the vertex v from the ball.
@@ -185,7 +186,7 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
         component: Set[Vertex] = next(comp for comp in components if v in comp)
         ma: int = len(component)
         if mi > ma:
-            # This can occur is there are fewer vertices in the
+            # This can occur if there are fewer vertices in the
             # component v belongs to than expected. In this case,
             # the radius we would potentially determine for v is
             # not of interest, given that it would be smaller than
@@ -195,7 +196,7 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
         v_is_a_local_cutvertex: bool = None
         # Proceed with the binary search.
         while True:
-            ### Update the current radius.
+            ### Update the current locality.
             if ma - mi == 1 and v_is_a_local_cutvertex is not None:
                 # One of either the mi or ma values at the previous iteration of
                 # this algorithm was already tried, in which case the typical
