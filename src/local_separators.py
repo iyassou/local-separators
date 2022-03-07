@@ -359,7 +359,10 @@ def split_at_local_cutvertices(G: nx.Graph, local_cutvertices: List[LocalCutvert
         subset: Tuple[Vertex, ...]
         for i, subset in enumerate(lcv.edge_partition):
             # Modify the subset to exclude other local cutvertices.
-            subset = tuple(vertex for vertex in subset if vertex not in lcv_vertices)
+            subset: Tuple[Vertex, ...] = tuple(
+                vertex for vertex in subset
+                if vertex not in lcv_vertices
+            )
             if not subset:
                 continue
             # Create the split vertex first.
