@@ -72,6 +72,8 @@ def _edge_from_line(line: str) -> Optional[Tuple[int, int]]:
     '''
     if not line.strip(): # Empty line
         return None
+    if line.startswith('#'): # Comment
+        return None
     return tuple(map(int, line.split()))
 
 def _edgelist_file_to_networkx_graph(file: Path) -> nx.Graph:
