@@ -72,7 +72,7 @@ def _edge_from_line(line: str) -> Optional[Tuple[int, int]]:
     '''
     if not line.strip(): # Empty line
         return None
-    if line.startswith('#'): # Comment
+    if line.startswith('#') or line.startswith('%'): # Comment
         return None
     return tuple(map(int, line.split()))
 
