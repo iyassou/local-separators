@@ -202,3 +202,70 @@ def bounding_box_2d(coordinates: List[Point2d], fudge: float=None) -> BoundingBo
 
 def escape_underscore(s: str) -> str:
     return s.replace('_', '\_')
+
+def visually_distinct_colours(k: int) -> List:
+    '''
+        Returns a list of k visually distinct colours.
+
+        Parameters
+        ----------
+        k: int
+
+        Notes
+        -----
+        The k visually distinct colours were obtained from the following
+        website:
+        
+            https://mokole.com/palette.html
+        
+        which looks like it's using a genetic algorithm, which is pretty
+        cool. Here are the tweakable settings:
+        
+            - number of colors
+            - percentage of minimum allowed luminosity
+            - percentage of maximum allowed luminosity
+            - number of maximum loops
+
+        ### Palette 1 (score 31.86): [30, 5%, 90%, 5000]
+
+        | dimgray | darkolivegreen | saddlebrown | forestgreen | darkslateblue |
+        | darkgoldenrod | darkcyan | navy | yellowgreen | darkseagreen | purple |
+        | maroon3 | red | yellow | chartreuse | darkviolet | springgreen | crimson |
+        | aqua | deepskyblue | blue | lightsteelblue | coral | dodgerblue | lightgreen |
+        | deeppink | mediumslateblue | violet | navajowhite | lightpink
+
+        [
+            '696969', '556b2f', '8b4513', '228b22', '483d8b', 'b8860b', '008b8b', '000080', '9acd32', '8fbc8f',
+            '800080', 'b03060', 'ff0000', 'ffff00', '7fff00', '9400d3', '00ff7f', 'dc143c', '00ffff', '00bfff',
+            '0000ff', 'b0c4de', 'ff7f50', '1e90ff', '90ee90', 'ff1493', '7b68ee', 'ee82ee', 'ffdead', 'ffb6c1'
+        ]
+
+        ### Palette 2 (score 31.86): [31, 5%, 85%, 10000]
+
+        | gray | maroon2 | darkgreen | olive | darkslateblue | darkcyan | steelblue |
+        | chocolate | yellowgreen | darkblue | darkseagreen | darkmagenta | maroon3 |
+        | red | orange | yellow | lime | blueviolet | springgreen | crimson | aqua |
+        | blue | lightcoral | fuchsia | dodgerblue | lightgreen | lightblue | deeppink |
+        | mediumslateblue | violet | navajowhite |
+
+        [
+            '808080', '7f0000', '006400', '808000', '483d8b', '008b8b', '4682b4', 'd2691e', '9acd32', '00008b',
+            '8fbc8f', '8b008b', 'b03060', 'ff0000', 'ffa500', 'ffff00', '00ff00', '8a2be2', '00ff7f', 'dc143c',
+            '00ffff', '0000ff', 'f08080', 'ff00ff', '1e90ff', '90ee90', 'add8e6', 'ff1493', '7b68ee', 'ee82ee',
+            'ffdead'
+        ]
+
+        Returns
+        -------
+        List[str]
+            List of k visually distinct colours
+    '''
+    palette: List[str] = [
+        '808080', '7f0000', '006400', '808000', '483d8b', '008b8b', '4682b4', 'd2691e', '9acd32', '00008b',
+        '8fbc8f', '8b008b', 'b03060', 'ff0000', 'ffa500', 'ffff00', '00ff00', '8a2be2', '00ff7f', 'dc143c',
+        '00ffff', '0000ff', 'f08080', 'ff00ff', '1e90ff', '90ee90', 'add8e6', 'ff1493', '7b68ee', 'ee82ee',
+        'ffdead',
+    ]
+    if k > len(palette):
+        raise NotImplementedError(f'cannot return more than {len(palette)} visually distinct colours')
+    return palette[:k]
