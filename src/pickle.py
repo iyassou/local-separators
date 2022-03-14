@@ -171,5 +171,33 @@ def __pickle_Network_Neural_MJS20(overwrite: bool=False):
     dur: float = total_end - total_start
     print('Total pickling time:', sec2str(dur, rounding=2))
 
+def __pickle_roadNetCA(overwrite: bool=False):
+    if overwrite:
+        print('OVERWRITING PICKLED LOCAL CUTVERTICES!')
+        print('Confirm? [y/n]')
+        while True:
+            print('>>> ', end='')
+            ans: str = input()
+            if ans.lower().startswith('y'):
+                print('Overwrite confirmed.')
+                break
+            elif ans.lower().startswith('n'):
+                print('Overwrite aborted!')
+                exit()
+    from .datasets import roadNetCA
+    from .utils import seconds_to_string as sec2str
+    import time
+    # Run routine to pickle roadNetCA dataset.
+    print('Loading in graph...')
+    start: float = time.perf_counter()
+    G: nx.Graph = roadNetCA['roadNet-CA']
+    end: float = time.perf_counter()
+    print(f'Loaded graph in {sec2str(end - start, rounding=2)}.')
+    print(f'[1/1] Pickling {G.name.name}...')
+    start: float = time.perf_counter()
+    pickle_local_separators(G, overwrite=overwrite)
+    end: float = time.perf_counter()
+    print('Total pickling time:', sec2str(end - start, rounding=3))
+
 if __name__ == '__main__':
-    __pickle_Network_Neural_MJS20(overwrite=True)
+    __pickle_roadNetCA()
