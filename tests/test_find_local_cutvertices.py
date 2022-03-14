@@ -1,12 +1,10 @@
 from src.local_separators import (
     find_local_cutvertices,
     Vertex,
+    LocalCutvertex,
 )
 
-from typing import (
-    Dict,
-    List,
-)
+from typing import List
 
 import networkx as nx
 import pprint
@@ -26,8 +24,8 @@ class TestFindLocalCutvertices(unittest.TestCase):
         num_vertices: int
         for num_vertices in params:
             G: nx.Graph = nx.path_graph(num_vertices)
-            expected: Dict[Vertex, int] = {}
-            actual: Dict[Vertex, int] = find_local_cutvertices(G)
+            expected: List[LocalCutvertex] = []
+            actual: List[LocalCutvertex] = find_local_cutvertices(G)
             with self.subTest(msg=f'Path on {num_vertices} vertices'):
                 self.assertEqual(actual, expected, msg=f'expected nothing, got:\n{pprint.pformat(actual)}')
 
@@ -40,8 +38,11 @@ class TestFindLocalCutvertices(unittest.TestCase):
         num_vertices: int
         for num_vertices in params:
             G: nx.Graph = nx.cycle_graph(num_vertices)
-            expected: Dict[Vertex, int] = {}
-            actual: Dict[Vertex, int] = find_local_cutvertices(G)
+            expected: List[LocalCutvertex] = [
+                LocalCutvertex(vertex=i, locality=num_vertices - 1, edge_partition={((i-1) % num_vertices,), ((i+1) % num_vertices,)})
+                for i in range(num_vertices)
+            ]
+            actual: List[LocalCutvertex] = find_local_cutvertices(G)
             with self.subTest(msg=f'Cycle on {num_vertices} vertices'):
                 self.assertEqual(actual, expected, msg=f'expected nothing, got:\n{pprint.pformat(actual)}')
 
@@ -54,7 +55,7 @@ class TestFindLocalCutvertices(unittest.TestCase):
         num_vertices: int
         for num_vertices in params:
             G: nx.Graph = nx.complete_graph(num_vertices)
-            expected: Dict[Vertex, int] = {}
-            actual: Dict[Vertex, int] = find_local_cutvertices(G)
+            expected: List[LocalCutvertex] = []
+            actual: List[LocalCutvertex] = find_local_cutvertices(G)
             with self.subTest(msg=f'Complete graph on {num_vertices} vertices'):
                 self.assertEqual(actual, expected, msg=f'expected nothing, got:\n{pprint.pformat(actual)}')

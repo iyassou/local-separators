@@ -141,5 +141,38 @@ class TestBall(unittest.TestCase):
                 msg=err(vertex, radius, actual, expected)
             )
 
+    def test_w13_every_other_pair_of_spokes_removed(self):
+        G: nx.Graph = nx.cycle_graph(range(1, 13))
+        spokes = []
+        for i in range(1, 13, 4):
+            spokes.extend([(0,i), (0,i+1)])
+        G.add_edges_from(spokes)
+
+        with self.subTest(msg='W13: B(3/2, hub) (three triangles joined at a single vertex)'):
+            vertex: Vertex = 0
+            radius: float = 3/2
+            actual: nx.Graph = ball(G, vertex, radius)
+            expected: nx.Graph = nx.compose(
+                nx.cycle_graph(3),
+                nx.compose(
+                    nx.cycle_graph((vertex, 3, 4)),
+                    nx.cycle_graph((vertex, 5, 6))
+                )
+            )
+            self.assertTrue(
+                nx.is_isomorphic(actual, expected),
+                msg=err(Vertex, radius, actual, expected)
+            )
+
+        with self.subTest(msg='W13: B(1, hub) (star with 6 leaves)'):
+            vertex: Vertex = 0
+            radius: int = 1
+            actual: nx.Graph = ball(G, vertex, radius)
+            expected: nx.Graph = nx.star_graph(6)
+            self.assertTrue(
+                nx.is_isomorphic(actual, expected),
+                msg=err(vertex, radius, actual, expected)
+            )
+
 if __name__ == '__main__':
     unittest.main()

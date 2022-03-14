@@ -1,6 +1,7 @@
 from src.local_separators import (
-    split_at_vertices,
+    split_at_local_cutvertices,
     Vertex,
+    LocalCutvertex,
 )
 from tests.utils import polygon
 
@@ -19,11 +20,11 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import unittest
 
-class TestSplitAtVertices(unittest.TestCase):
+class TestSplitAtLocalCutvertices(unittest.TestCase):
 
     def test_w13_with_six_spokes_removed(self):
         '''
-            Tests the split_at_vertices function on the wheel on 13 vertices
+            Tests the split_at_local_cutvertices function on the wheel on 13 vertices
             with every other pair of consecutive spokes removed.
         '''
         # Construct G.
@@ -36,7 +37,10 @@ class TestSplitAtVertices(unittest.TestCase):
         G.add_edges_from(spokes)
         # Split at the hub with radius 3.
         radius: int = 3
-        H: nx.Graph = split_at_vertices(G, hub, radius, inplace=False)
+        hub_cutvertex: LocalCutvertex = LocalCutvertex(
+            vertex=hub, locality=radius, edge_partition={(1, 2), (5, 6), (9, 10)}
+        )
+        H: nx.Graph = split_at_local_cutvertices(G, [hub_cutvertex], inplace=False)
         # Set the drawing layout.
         ### NOTE:   this is slightly complicated because I want the graphs
         ###         to be drawn in a specific way.
@@ -57,7 +61,7 @@ class TestSplitAtVertices(unittest.TestCase):
         height: float = 0.8 * smallest_distance
         triangle: Generator[Tuple[float, float], None, None] = polygon(3, height)
         #### Construct H's drawing layout.
-        pos_H: Dict[Vertex, Tuple[float, float]] = pos_rim.copy()
+        pos_H: Dict[Vertex, Tuple[float, float]] = pos_G.copy()
         pos_H.update({v: next(triangle) for v, split in H.nodes(data='split') if split})
         # Show the results for now.
         ax1 = plt.subplot(121)

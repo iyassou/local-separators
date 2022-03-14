@@ -20,8 +20,9 @@ from . import (
 )
 from .local_separators import (
     ball,
-    split_at_vertices,
+    split_at_local_cutvertices,
     Vertex,
+    LocalCutvertex,
 )
 from .utils import (
     Point2d,
@@ -32,6 +33,7 @@ from .utils import (
     euclidean_distance,
     nearest,
     pluralise,
+    visually_distinct_colours,
 )
 
 from functools import partial
@@ -329,7 +331,7 @@ def draw_graph(G: nx.Graph, pos: Dict[Vertex, Point2d], data_axis_fudge: float=N
     # Save PNG.
     plt.savefig(png, dpi=dpi)
 
-def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutvertices: Dict[Vertex, int], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, local_cutvertex_style: NodeStyle=None, ball_vertex_style: NodeStyle=None, node_style: NodeStyle=None, ball_edge_style: EdgeStyle=None, edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
+def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutvertices: List[LocalCutvertex], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, local_cutvertex_style: NodeStyle=None, ball_vertex_style: NodeStyle=None, node_style: NodeStyle=None, ball_edge_style: EdgeStyle=None, edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
     '''
         Draws the supplied local cutvertices on G.
 
@@ -338,8 +340,8 @@ def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutver
         G: nx.Graph
         pos: Dict[Vertex, Point2d]
             A mapping of vertices to their Cartesian coordinates.
-        local_cutvertices: Dict[Vertex, int]
-            A mapping of local cutvertices to their respective radii.
+        local_cutvertices: List[LocalCutvertex]
+            A list of local cutvertices.
         data_axis_fudge: float, optional
             Percentage expressed as a float between 0 (exclusive) and 1
             (inclusive). The bounding box around the points generated
@@ -428,7 +430,10 @@ def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutver
     min_marker_size: float = max(min(node_size), 2)
     ball_node_marker_size: float = max(min_marker_size, 20)
     # Draw the local cutvertices.
-    for v, r in local_cutvertices.items():
+    for local_cutvertex in local_cutvertices:
+        # Bound variables locally.
+        v: Vertex = local_cutvertex.vertex
+        r: int = local_cutvertex.locality
         # Create PNG filename.
         png: Path = graph_media_folder / png_template.format(v=v, r=r)
         # If we're not overwriting then skip.
@@ -483,17 +488,18 @@ def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutver
         ax.set_xlim((min_x, max_x))
         ax.set_ylim((min_y, max_y))
 
-def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[Vertex, int], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, split_vertex_style: NodeStyle=None, non_split_vertex_style: NodeStyle=None, split_edge_style: EdgeStyle=None, non_split_edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
+def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: List[LocalCutvertex], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, local_cutvertex_style: NodeStyle=None, split_vertex_style: NodeStyle=None, component_vertex_style: NodeStyle=None, component_edge_style: EdgeStyle=None, default_edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
     '''
-        Draws G with special care to its split vertices, if present.
+        Split G at its local cutvertices to obtain H, then draw G and H.
+        The split vertices and the components of H without the local cutvertices of G are distinguished.
 
         Parameters
         ----------
         G: nx.Graph
         layout: callable
             A function which maps vertices to their Cartesian coordinates.
-        local_cutvertices: Dict[Vertex, int]
-            A mapping of local cutvertices to their respective radii.
+        local_cutvertices: List[LocalCutvertex]
+            A list of local cutvertices.
         data_axis_fudge: float, optional
             Percentage expressed as a float between 0 (exclusive) and 1
             (inclusive). The bounding box around the points generated
@@ -504,17 +510,23 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[V
             Fraction of the inter-node distance that should be used for
             calculating the marker sizes.
             If None, will be assigned value of DEFAULT_INTER_NODE_DISTANCE_FRACTION.
+        local_cutvertex_style: NodeStyle, optional
+            If supplied, the style in which the local cutvertices should be drawn.
+            Else the default local cutvertex style.
         split_vertex_style: NodeStyle, optional
-            If supplied, the style in which the local split vertices should be drawn.
+            If supplied, the style in which the split vertices should be drawn.
             Else the default split vertex style.
-        non_split_vertex_style: NodeStyle, optional
-            If supplied, the style in which non-split vertices should be drawn.
-            Else the default non-split vertex style.
-        split_edge_style: EdgeStyle, optional
-            If supplied, the style in which the split edges should be drawn.
-        non_split_edge_style: EdgeStyle, optional
-            If supplied, the style in which non-split edges should be drawn.
-            Else the default non-split edge style.
+        component_vertex_style: NodeStyle, optional
+            If supplied, the style in which vertices in a component of (H - local_cutvertices)
+            should be drawn.
+            Else the default component vertex style.
+        component_edge_style: EdgeStyle, optional
+            If supplied, the style in which edges in a component of (H - local_cutvertices)
+            should be drawn.
+            Else the default component edge style.
+        default_edge_style: EdgeStyle, optional
+            If supplied, the style in which edges not contained in any component of
+            (H - local_cutvertices) should be drawn.
         fig_size: FigureSize, optional
             Size of the figure in inches.
             If None, will be assigned value of DEFAULT_FIGURE_SIZE.
@@ -524,6 +536,15 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[V
         overwrite: bool, default True
             Should the resulting image overwrite a potentially pre-existing
             image?
+
+        Notes
+        -----
+        First we split G at the supplied local cutvertices to obtain H.
+        Secondly we find k, the number of components of H \ local_cutvertices.
+        Thirdly we generate k + wiggle_room visually distinct colours.
+        Fourthly we plot G with each of the k components of (H \ local_cutvertices) coloured distinctly.
+        Fifthly we plot H with each of the k components of (H \ local_cutvertices), the split vertices,
+        and edges between components of (H \ local_cutvertices) coloured distinctly.
     '''
     # Validate the graph name.
     _validate_graph_name(G.name)
@@ -537,17 +558,19 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[V
     if not (0 <= inter_node_distance_fraction <= 1):
         raise ValueError(f'fraction of inter-node distance must be between 0 and 1 inclusive, got {inter_node_distance_fraction}')
     # Wrangle the Styles. Note the node sizes will be decided later.
-    if non_split_vertex_style is None:
-        non_split_vertex_style: NodeStyle = NodeStyle(label='$v\in V(G)$', alpha=0.5, node_color='tab:green')
-    if non_split_edge_style is None:
-        non_split_edge_style: EdgeStyle = EdgeStyle(label='$e\in E(G)$', alpha=0.6, width=0.15)
     if split_vertex_style is None:
-        split_vertex_style: NodeStyle = NodeStyle(node_color='tab:purple', label='split vertex', alpha=1.0)
-    if split_edge_style is None:
-        split_edge_style: EdgeStyle = EdgeStyle(label='split vertex edge', edge_color='tab:orange', alpha=1.0, width=3)
-    if non_split_vertex_style.node_shape != split_vertex_style.node_shape:
-        raise ValueError(f'node shape parameters must be consistent: got {repr(non_split_vertex_style.node_shape)} for non-split vertices and {repr(split_vertex_style.node_shape)} for split vertices')
-    if non_split_vertex_style.node_shape not in MarkerSizeAreaFunction: # they're all the same here
+        split_vertex_style: NodeStyle = NodeStyle(label='split vertex', alpha=0.7)
+    if local_cutvertex_style is None:
+        local_cutvertex_style: NodeStyle = NodeStyle(label='local cutvertex', alpha=0.8)
+    if component_vertex_style is None:
+        component_vertex_style: NodeStyle = NodeStyle(label='component vertex', alpha=0.5)
+    if component_edge_style is None:
+        component_edge_style: EdgeStyle = EdgeStyle(label='component edge', alpha=0.8, width=0.8)
+    if default_edge_style is None:
+        default_edge_style: EdgeStyle = EdgeStyle(label='default edge', alpha=0.5, width=0.5)
+    if component_vertex_style.node_shape != split_vertex_style.node_shape:
+        raise ValueError(f'node shape parameters must be consistent: got {component_vertex_style.node_shape!r} for component vertices and {split_vertex_style.node_shape!r} for split vertices')
+    if component_vertex_style.node_shape not in MarkerSizeAreaFunction: # they're all the same here
         raise NotImplementedError('cannot calculate area of custom marker, use one of: "o", "s", "^"')
     # Wrangle the figure size.
     if fig_size is None:
@@ -564,89 +587,134 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[V
     # If we're not overwriting then stop.
     if not overwrite and png.exists():
         return
-    
-    # Split the graph at its local cutvertices.
-    vertices: List[Vertex] = list(local_cutvertices.keys())
-    radii: List[int] = [local_cutvertices[v] for v in vertices]
-    H: nx.Graph = split_at_vertices(G, vertices, radii, inplace=False)
-    # Obtain the layout.
-    pos_G: Dict[Vertex, Point2d] = layout(G)
-    pos_H: Dict[Vertex, Point2d] = layout(H)
+
+    # Split at the local cutvertices to obtain H.
+    H: nx.Graph = split_at_local_cutvertices(G, local_cutvertices)
+    # Find k, the number of components in (H - local_cutvertices).
+    ## Construct a set of the local cutvertices.
+    lcv_set: Set[Vertex] = set(lcv.vertex for lcv in local_cutvertices)
+    ## Obtain k.
+    components: List[Set[Vertex]] = list(
+        nx.connected_components(
+            nx.classes.graphviews.subgraph_view(
+                H, filter_node=lambda x: x not in lcv_set
+            )
+        )
+    )
+    k: int = len(components)
+    print('k:', k)
+    # We need k colours for the components, one for split vertices,
+    # one for local cutvertices, and one for edges that aren't in
+    # any component.
+    wiggle_room: int = 3
+    vd_colours: List[str] = visually_distinct_colours(k + wiggle_room)
+
+    # Obtain the layouts.
+    pos_G : Dict[Vertex, Point2d] = layout(G)
+    pos_H : Dict[Vertex, Point2d] = layout(H)
     # Configure the matplotlib figure and axes.
+    ## Obtain the subplots.
     fig, axes = plt.subplots(1, 2)
-    # axes[0] is good ol' G
-    # axes[1] is H
-    fig_size = (fig_size[0] * 2, fig_size[1])
+    ## Set figure parameters.
+    fig_size: Tuple[int, int] = (fig_size[0] * 2, fig_size[1])
     fig.set_size_inches(*fig_size)
     fig.set_dpi(dpi)
-    nodelists, node_sizes = [], []
+    ## For each Axes, calculate its limits and the marker sizes.
+    node_size_G = []
+    node_size_H = []
     for i, pos in enumerate((pos_G, pos_H)):
+        ### Obtain the bounding box.
         bbox = bounding_box_2d(list(pos.values()), fudge=data_axis_fudge)
         (min_x, max_y), (max_x, min_y) = bbox.top_left, bbox.bottom_right
+        ### Set the Axes limits.
         axes[i].set_xlim((min_x, max_x))
         axes[i].set_ylim((min_y, max_y))
-        # Obtain the marker sizes.
-        nodelist, node_size = calculate_marker_sizes(
-            axes[i], pos, non_split_vertex_style.node_shape, inter_node_distance_fraction, method='maxfit'
+        ### Calculate the marker sizes.
+        _, (node_size_G if not i else node_size_H)[:] = calculate_marker_sizes(
+            axes[i], pos, component_vertex_style.node_shape, inter_node_distance_fraction, method='maxfit'
         )
-        nodelists.append(nodelist)
-        node_sizes.append(node_size)
-    ### Draw G.
-    ax = axes[0]
-    ## Draw vertices.
-    min_marker_size: float = max(min(node_sizes[0]), 1)
-    split_vertex_marker_size: float = max(max(min(node_sizes[1]), 1), 10)
-    nodelist = list(G.nodes() - set(vertices))
-    nx.draw_networkx_nodes(
-        G, pos_G, nodelist=nodelist, node_size=min_marker_size, ax=ax, **non_split_vertex_style.asdict()
-    )
-    v_style = split_vertex_style.asdict()
-    v_style['label'] = 'local cutvertex'
-    nx.draw_networkx_nodes(
-        G, pos_G, nodelist=vertices, node_size=split_vertex_marker_size, ax=ax, **v_style
-    )
-    ## Draw edges.
+    # Decide the various marker sizes for G and H.
+    min_node_size_G: float = min(node_size_G)
+    component_vertex_size_G: float = max( min_node_size_G, 1 )
+    local_cutvertex_size_G: float = max( min_node_size_G, 10 )
+    min_node_size_H: float = min(node_size_H)
+    component_vertex_size_H: float = max( min_node_size_H, 1 )
+    split_vertex_size: float = max( min_node_size_H, 5 )
+    local_cutvertex_size_H: float = max( min_node_size_H, 10 )
+
+    # Obtain a set of all the edges in each graph.
+    edges_G: Set[Tuple[Vertex, Vertex]] = set(G.edges)
+    edges_H: Set[Tuple[Vertex, Vertex]] = set(H.edges)
+    # Go through each component.
+    for component, colour in zip(components, vd_colours[wiggle_room:]):
+        ### Plot the component's vertices.
+        nx.draw_networkx_nodes(
+            G, pos_G, nodelist=list(filter(G.has_node, component)),
+            node_color=colour, **component_vertex_style.asdict(),
+            node_size=component_vertex_size_G,
+            ax=axes[0]
+        )
+        nx.draw_networkx_nodes(
+            H, pos_H, nodelist=component, node_color=colour,
+            **component_vertex_style.asdict(),
+            node_size=component_vertex_size_H,
+            ax=axes[1]
+        )
+        ### Plot the component's edges.
+        edgelist: Set[Tuple[Vertex, Vertex]] = set(
+            nx.classes.graphviews.subgraph_view(
+                G, filter_node=lambda x: x in component
+            ).edges
+        )
+        nx.draw_networkx_edges(
+            G, pos_G, edgelist=edgelist, edge_color=colour,
+            **component_edge_style.asdict(),
+            ax=axes[0]
+        )
+        nx.draw_networkx_edges(
+            H, pos_H, edgelist=edgelist, edge_color=colour,
+            **component_edge_style.asdict(),
+            ax=axes[1]
+        )
+        ### Remove the component's edges from the total sets of edges.
+        edges_G.difference_update(edgelist)
+        edges_H.difference_update(edgelist)
+    ## Draw the secondary edges.
     nx.draw_networkx_edges(
-        G, pos_G, ax=ax, **non_split_edge_style.asdict()
+        G, pos_G, edgelist=edges_G, edge_color=vd_colours[0],
+        **default_edge_style.asdict(),
+        ax=axes[0]
     )
-    # Sort out legend.
-    ax.legend(scatterpoints=1, loc='best')
-    ### Draw H.
-    ax = axes[1]
-    ## Draw vertices.
-    min_marker_size: float = max(min(node_sizes[1]), 1)
-    split_vertices, non_split_vertices = [], []
-    for vertex, is_split in H.nodes(data='split'):
-        (split_vertices if is_split else non_split_vertices).append(vertex)
-    ## Draw split vertices.
+    nx.draw_networkx_edges(
+        H, pos_H, edgelist=edges_H, edge_color=vd_colours[0],
+        **default_edge_style.asdict(),
+        ax=axes[1]
+    )
+    ## Draw the split vertices.
     nx.draw_networkx_nodes(
-        H, pos_H, nodelist=split_vertices, node_size=split_vertex_marker_size, ax=ax,
-        **split_vertex_style.asdict()
+        H, pos_H, nodelist=[v for v,yup in H.nodes(data='split') if yup],
+        node_color=vd_colours[1], **split_vertex_style.asdict(),
+        node_size=split_vertex_size, ax=axes[1]
     )
-    ## Draw non-split vertices.
+    ## Draw the local cutvertices.
     nx.draw_networkx_nodes(
-        H, pos_H, nodelist=non_split_vertices, node_size=min_marker_size, ax=ax,
-        **non_split_vertex_style.asdict()
+        G, pos_G, nodelist=lcv_set, node_color=vd_colours[2],
+        **local_cutvertex_style.asdict(), node_size=local_cutvertex_size_G,
+        ax=axes[0]
     )
-    # Draw the edges.
-    split_edges, non_split_edges = [], []
-    for edge in H.edges():
-        (
-            split_edges
-            if any(getattr(v, 'split', False) for v in edge)
-            else
-            non_split_edges
-        ).append(edge)
-    ## Draw the split edges.
-    nx.draw_networkx_edges(H, pos_H, edgelist=split_edges, ax=ax, **split_edge_style.asdict())
-    ## Draw the non-split edges.
-    nx.draw_networkx_edges(H, pos_H, edgelist=non_split_edges, ax=ax, **non_split_edge_style.asdict())
-    ## Sort out the legend.
-    ax.legend(scatterpoints=1, loc='best')
+    nx.draw_networkx_nodes(
+        H, pos_H, nodelist=lcv_set, node_color=vd_colours[2],
+        **local_cutvertex_style.asdict(), node_size=local_cutvertex_size_H,
+        ax=axes[1]
+    )
+
+    # Sort out the legends.
+    for i in range(2):
+        axes[i].legend(scatterpoints=1, loc='best')
     # Sort out the titles.
     name: str = '/'.join(map(escape_underscore, (G.name.resolve().parent.name, G.name.name)))
     stats = []
-    for graph in (G,H):
+    for graph in (G, H):
         n_vertices: int = graph.number_of_nodes()
         n_edges: int = graph.number_of_edges()
         n_components: int = nx.algorithms.components.number_connected_components(graph)
@@ -660,7 +728,7 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: Dict[V
     # Tighten the layout because there's only one subplot.
     plt.tight_layout()
     # Save PNG.
-    plt.savefig(png, dpi=dpi)
+    # plt.savefig(png, dpi=dpi)
     plt.show()
 
 def draw_jan(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutvertices: Dict[Vertex, int], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, split_vertex_style: NodeStyle=None, non_split_vertex_style: NodeStyle=None, split_edge_style: EdgeStyle=None, non_split_edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
@@ -669,7 +737,7 @@ def draw_jan(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutvertices: Dict[Ve
         Notes
         -----
         Assumes the graph is already split at its local cutvertices in the expected, typical way, as
-        described by the behaviour of the src.local_separators.split_at_vertices function.
+        described by the behaviour of the src.local_separators.split_at_local_cutvertices function.
     '''
     # Validate the graph name.
     _validate_graph_name(G.name)
@@ -728,10 +796,6 @@ def draw_jan(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutvertices: Dict[Ve
     min_marker_size: float = max(min(node_size), 1)
     split_vertex_marker_size: float = max(min_marker_size, 10)
     ### BLACK NOTEBOOK 2022/02/03
-    
-    
-    
-
 
 def draw_locality_heatmap(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutvertices: Dict[Vertex, int], cmap: Union[matplotlib.colors.LinearSegmentedColormap, str]=None, data_axis_fudge: float=None, inter_node_distance_fraction: float=None, method: str='maxfit', node_style: NodeStyle=None, edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
     '''

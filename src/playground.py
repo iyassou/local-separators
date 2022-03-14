@@ -6,14 +6,20 @@ from . import (
     _pickle_name,
 )
 
-from .datasets import Network_Data_MJS20 as NDMJS20
+from .datasets import (
+    Network_Data_MJS20 as NDMJS20,
+    roadNetCA
+)
 from .local_separators import (
     Vertex,
-    split_at_vertices,
+    LocalCutvertex,
+    split_at_local_cutvertices,
     ball,
 )
 from .utils import (
     seconds_to_string as sec2str,
+    escape_underscore,
+    pluralise,
 )
 from .visualise import (
     draw_graph,
@@ -137,16 +143,16 @@ def NDMJS20_sorted_by_local_cutvertex_count():
     graphs = np.array(
         __get_Network_Data_MJS20_graphs(), dtype=object
     )
-    local_cutvertices: List[Dict[Vertex, int]] = []
+    local_cutvertices: List[List[LocalCutvertex]] = []
     for graph in graphs:
         with open(_pickle_name(graph.name), 'rb') as handle:
             local_cutvertices.append(pickle.load(handle))
-    min_radius: int = 4
+    min_locality: int = 4
     scores = np.array(
         [
             sum(
-                v for k,v in Counter(lc.values()).items()
-                if k > min_radius
+                v for k,v in Counter(lcv.locality for lcv in lc).items()
+                if k > min_locality
             )
             for lc in local_cutvertices
         ]
@@ -156,30 +162,88 @@ def NDMJS20_sorted_by_local_cutvertex_count():
     with open('sorted_by_local_cutvertex_count.txt', 'w') as f:
         for i, graph in enumerate(graphs[inds][:top_n]):
             idx = inds[i]
-            lc: Dict[Vertex, int] = local_cutvertices[idx]
-            rad_count = Counter(filter(lambda x: x > min_radius, lc.values()))
+            lc: List[LocalCutvertex] = local_cutvertices[idx]
+            rad_count = Counter(filter(lambda x: x > min_locality, [lcv.locality for lcv in lc]))
             f.write(f'Position #{i+1} (Score {scores[idx]}): {graph.name.stem}\n')
             for rad, count in rad_count.items():
                 f.write(f">>> {pluralise(count, f'{rad}-local cutvertex')}\n")
             f.write('-'*20 + '\n')
     print('Done.')
 
+def graphs_with_no_neighbouring_local_cutvertices():
+    min_locality: int = 4
+    max_locality: int = 10
+    top: int = 17
+    graph_names: List[str] = []
+    local_cutvertices: List[List[LocalCutvertex]] = []
+    print('Reading in graphs...')
+    with open('sorted_by_local_cutvertex_count.txt', 'r') as f:
+        while top:
+            graph_name: str = f.readline().strip().split(':')[1].strip()
+            graph_names.append(graph_name)
+            graph: nx.Graph = NDMJS20[graph_name]
+            with open(_pickle_name(graph.name), 'rb') as handle:
+                local_cutvertices.append(pickle.load(handle))
+            line: str = f.readline()
+            while not all(x == '-' for x in line.strip()):
+                line: str = f.readline()
+            top -= 1
+    print(len(graph_names), 'graphs read, determining non-problematic ones...')
+    non_problematic: List[Tuple[int, str]] = []
+    lcv: List[LocalCutvertex]
+    for j, (graph_name, lcv) in enumerate(zip(graph_names, local_cutvertices)):
+        print('Processing graph number', j+1)
+        locality: int = min_locality
+        while True:
+            # Obtain all the local cutvertices.
+            all_lcvs: List[Vertex] = set(
+                lc.vertex for lc in lcv
+                if lc.locality == locality
+            )
+            if not all_lcvs:
+                if locality >= max_locality:
+                    break
+                locality += 1
+                continue
+            # For each local cutvertex, see if all of its edge-partition
+            # subsets don't contain another local cutvertex.
+            passed_all: bool = True
+            for lc in lcv:
+                passed: bool = all(
+                    other_lc not in subset
+                    for subset in lc.edge_partition
+                    for other_lc in lcv if other_lc != lc
+                )
+                if not passed:
+                    passed_all: bool = False
+                    break
+            if passed_all:
+                non_problematic.append((locality, graph_name))
+            locality += 1
+    if non_problematic:
+        for locality, name in non_problematic:
+            print(name, 'is not problematic at locality', locality)
+    else:
+        print('abandon ship, include the stats graph and write the report')
+
 # FIGURES
 
-def __radii_Network_Data_MJS20(min_radius: int=None):
+def __radii_Network_Data_MJS20(min_locality: int=None):
     from . import _pickle_name
     import pickle
     # Obtain all the graphs in the dataset.
     graphs: List[nx.Graph] = __get_Network_Data_MJS20_graphs()
     # Concatenate all the radii.
-    if min_radius is None:
-        min_radius: int = 0
+    min_locality: int = min_locality or 0
     radii = []
     for graph in graphs:
         with open(_pickle_name(graph.name), 'rb') as handle:
-            local_cutvertices: Dict[Vertex, int]= pickle.load(handle)
+            local_cutvertices: List[LocalCutvertex]= pickle.load(handle)
         radii.extend(
-            filter(lambda x: x >= min_radius, local_cutvertices.values())
+            [
+                lcv.locality for lcv in local_cutvertices
+                if lcv.locality >= min_locality
+            ]
         )
     radii = Counter(radii)
     keys, vals = radii.keys(), radii.values()
@@ -207,7 +271,7 @@ def __radii_Network_Data_MJS20(min_radius: int=None):
         + f' dataset ({len(graphs)} graphs)'
     )
     plt.tight_layout()
-    plt.savefig('ndmjs20_radii_distribution.png', dpi=1200)
+    plt.show()
 
 def _interim_report_1_figure():
     '''
@@ -266,6 +330,23 @@ def _interim_report_1_figure():
     nx.draw_networkx_edges(G, pos, edgelist=G.edges() - ball_edges, alpha=0.4, label=fr'$xy\in \left\lbrace xy\in E\mid x\neq {local_cutvertex}, y\neq {local_cutvertex}\right\rbrace$')
     plt.legend(scatterpoints=1, loc=legend_loc)
     plt.title(f'Graph $G$ with $2$-local cutvertex ${local_cutvertex}$ removed')
+    plt.show()
+
+def w13_every_other_pair_of_spokes_removed(layout: callable):
+    G: nx.Graph = nx.cycle_graph(range(2, 14))
+    spokes = []
+    for i in range(2, 14, 4):
+        spokes.extend([(1, i), (1, i+1)])
+    G.add_edges_from(spokes)
+    pos = layout(G)
+    fig, axes = plt.subplots(1, 2)
+    ax = axes[0]
+    nx.draw_networkx(G, pos, with_labels=True, font_color='w', ax=ax)
+    ax.set_title('Graph $H$, isomorphic to $W^{14}$ with every other pair of spokes removed')
+    ax = axes[1]
+    B = ball(G, 1, 1.5)
+    nx.draw_networkx(B, pos, with_labels=True, font_color='w', ax=ax)
+    ax.set_title('$B_{3/2}(1)$ in $H$')
     plt.show()
 
 # QUICK PROTOTYPING (lol, find an accurate name)
@@ -351,8 +432,113 @@ def split_vertices():
     ax.legend(scatterpoints=1, loc='best')
     plt.show()
 
+# STATS SHIT
+
+def number_of_components_post_splitting_NDMJS20():
+    '''
+        For each graph, split at its local cutvertices, delete the local
+        cutvertices in the resulting graph, and plot the number of components.
+        I'm going to cycle through the different minimum localities I'd
+        like to consider.
+    '''
+    # Obtain subplots.
+    localities: List[int] = list(range(3, 10))
+    fig, axes = plt.subplots(2, 4)
+    # Obtain graphs.
+    graphs: List[nx.Graph] = __get_Network_Data_MJS20_graphs()
+    # Obtain graph names.
+    MAX_LENGTH: int = 15
+    graph_names: List[str] = [
+        escape_underscore(
+            graph.name.stem[:MAX_LENGTH]
+        )
+        for graph in graphs]
+    # Obtain their local cutvertices.
+    local_cutvertices: List[List[LocalCutvertex]] = []
+    for graph in graphs:
+        with open(_pickle_name(graph.name), 'rb') as handle:
+            local_cutvertices.append(pickle.load(handle))
+    # For each locality, split all vertices larger than or equal to
+    # that locality, and visualise the number of components.
+    for (i, locality), ax in zip(enumerate(localities), axes.reshape(-1)):
+        # Configure matplotlib axes.
+        ax.set_xticklabels(graph_names, rotation=45, ha='right')
+        # Obtain split graphs without local cutvertices.
+        split_graphs: List[nx.Graph] = []
+        for graph, lcvs in zip(graphs, local_cutvertices):
+            # Filter local cutvertices by locality.
+            lcvs_filtered: List[LocalCutvertex] = [
+                lcv for lcv in lcvs
+                if lcv.locality >= locality
+            ]
+            lcvs_filtered_vertices: Set[Vertex] = set(
+                lcv.vertex for lcv in lcvs_filtered
+            )
+            # Split at graph.
+            split_graph: nx.Graph = split_at_local_cutvertices(
+                graph,
+                lcvs_filtered,
+                inplace=False
+            )
+            # Remove local cutvertices from split graph.
+            split_graph: nx.Graph = nx.subgraph_view(
+                split_graph,
+                filter_node=lambda node: node not in lcvs_filtered_vertices
+            )
+            # Add to list of split graphs.
+            split_graphs.append(split_graph)
+        # Find the number of connected components for each modified split graph.
+        num_components: List[int] = list(
+            map(nx.number_connected_components, split_graphs)
+        )
+        # Plot this data.
+        ## Obtain interesting graphs.
+        interesting_graphs: List[str] = [
+            (graph_name, num_comp)
+            for graph_name, num_comp in zip(graph_names, num_components)
+            if num_comp > 1
+        ]
+        ## Plot interesting graphs.
+        interesting_names, interesting_num_components = zip(*interesting_graphs)
+        ax.set_yticks(interesting_num_components)
+        ax.bar(interesting_names, interesting_num_components)
+        ## Add dotted lines for readibility.
+        threshold_line_params = {
+            'linewidth': 0.2,
+            'color': 'grey',
+            'linestyle': 'dashed',
+            'alpha': 0.25
+        }
+        for num_comp in interesting_num_components:
+            ax.axhline(y=num_comp, **threshold_line_params)
+        # Give a title.
+        ax.set_title(f'$r \geq{locality}$')
+    # Set up figure title.
+    fig.suptitle('\# components when split at local cutvertices and removed')
+    # Show us the money.
+    plt.tight_layout()
+    plt.show()
+
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> --- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 if __name__ == '__main__':
+    
+    # import pickle
+    # G: nx.Graph = NDMJS20['broom']
+    # with open(_pickle_name(G.name), 'rb') as handle:
+    #     local_cutvertices: List[LocalCutvertex] = pickle.load(handle)
+    # layout: callable = nx.kamada_kawai_layout
+    # draw_split_vertices(G, layout, local_cutvertices)
+
+    # layout: callable = nx.kamada_kawai_layout
+    # w13_every_other_pair_of_spokes_removed(layout)
+
+    # __radii_Network_Data_MJS20()
+
     # try_draw_split_vertices('net_green_eggs')
-    split_vertices()
+    # split_vertices()
+    # __radii_Network_Data_MJS20(name='howareyoudifferent')
+    # NDMJS20_sorted_by_local_cutvertex_count()
+    # graphs_with_no_neighbouring_local_cutvertices()
+
+    number_of_components_post_splitting_NDMJS20()
