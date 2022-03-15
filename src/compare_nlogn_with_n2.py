@@ -120,16 +120,16 @@ def __pickle_Network_Neural_MJS20(overwrite: bool=False):
     # Run routine to pickle Network_Neural_MJS20 dataset.
     categories: List[str] = 'FoodWebs Genetic Language Metabolic Neural Social Trade'.split()
     datasets: List[List[nx.Graph]] = list(map(lambda x: ND[x], categories))
+    graphs: List[nx.Graph] = [graph for dataset in datasets for graph in dataset]
+    graphs.sort(key=lambda graph: graph.name.stat().st_size) # ascending by file size
     total_start: float = time.perf_counter()
-    for i, (category, dataset) in enumerate(zip(categories, datasets)):
-        print(f'[{i+1}/{len(categories)}] {category}')
-        G: nx.Graph
-        for i, G in enumerate(dataset):
-            print(f'\t({i+1}/{len(dataset)}) Pickling {G.name.name}...')
-            start = time.perf_counter()
-            pickle_local_separators(G, overwrite=overwrite)
-            end = time.perf_counter()
-            print('\tTook', sec2str(end-start, rounding=3))
+    G: nx.Graph
+    for i, G in enumerate(graphs):
+        print(f'[{i+1}/{len(graphs)}] Pickling {G.name.name}...')
+        start = time.perf_counter()
+        pickle_local_separators(G, overwrite=overwrite)
+        end = time.perf_counter()
+        print('\tTook', sec2str(end-start, rounding=3))
     total_end: float = time.perf_counter()
     dur: float = total_end - total_start
     print('Total pickling time:', sec2str(dur, rounding=2))
