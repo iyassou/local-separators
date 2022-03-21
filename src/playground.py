@@ -77,14 +77,15 @@ def try_draw_local_cutvertices():
     pos: Dict[Vertex, Point2d] = layout(G)
     draw_local_cutvertices(G, pos, local_cutvertices, overwrite=True)
 
-def try_draw_split_vertices(graph: str, min_radius: int=None):
-    MIN_RADIUS: int = min_radius or 3
+def try_draw_split_vertices(graph: str, min_locality: int=None):
+    import pickle
     G: nx.Graph = NDMJS20[graph]
+    min_locality: int = min_locality or 0
     with open(_pickle_name(G.name), 'rb') as handle:
-        local_cutvertices: Dict[Vertex, int] = pickle.load(handle)
-    local_cutvertices: Dict[Vertex, int] = {
-        k:v for k,v in local_cutvertices.items() if v >= MIN_RADIUS
-    }
+        local_cutvertices: List[LocalCutvertex] = [
+            lcv for lcv in pickle.load(handle)
+            if lcv.locality >= min_locality
+        ]
     layout: callable = nx.kamada_kawai_layout
     draw_split_vertices(G, layout, local_cutvertices)
 
@@ -432,7 +433,63 @@ def split_vertices():
     ax.legend(scatterpoints=1, loc='best')
     plt.show()
 
+def is_this_definitely_working():
+    # Construct G.
+    G: nx.Graph = nx.Graph()
+    v_edges: List[Tuple[Vertex, Vertex]] = [(x, 'v') for x in 'abc']
+    w_edges: List[Tuple[Vertex, Vertex]] = [(x, 'w') for x in 'def']
+    G.add_edges_from(v_edges)
+    G.add_edges_from(w_edges)
+    G.add_edge('v', 'w')
+    # Construct an artificial list of local cutvertices.
+    v_locality: int = 2
+    w_locality: int = 2
+    local_cutvertices: List[LocalCutvertex] = [
+        LocalCutvertex(vertex='v', locality=v_locality, edge_partition={('w',), tuple('abc')}),
+        LocalCutvertex(vertex='w', locality=w_locality, edge_partition={('v',), tuple('def')}),
+    ]
+    # Split at the local cutvertices to obtain H.
+    H: nx.Graph = split_at_local_cutvertices(G, local_cutvertices, inplace=False)
+    # Delete the local cutvertices from H to obtain H_prime.
+    H_prime: nx.Graph = H.copy()
+    H_prime.remove_nodes_from('vw')
+    # Visualise the results.
+    fig, axes = plt.subplots(1, 3)
+    graphs: Tuple[nx.Graph] = (G, H, H_prime)
+    names: Tuple[str] = ('G', 'H', r'H^\prime')
+    for graph, name, ax in zip(graphs, names, axes.reshape(-1)):
+        nx.draw_networkx(graph, with_labels=True, ax=ax)
+        ax.set_title(f'Graph ${name}$')
+    plt.show()
+
 # STATS SHIT
+
+def local_cutvertex_radii_distribution(G: nx.Graph):
+    with open(_pickle_name(G.name), 'rb') as handle:
+        local_cutvertices: List[LocalCutvertex] = pickle.load(handle)
+    c = Counter(lcv.locality for lcv in local_cutvertices)
+    keys, vals = c.keys(), c.values()
+    fig, ax = plt.subplots(1, 1)
+    ax.set_yticks(list(vals))
+    ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    ax.minorticks_off()
+    ax.bar(keys, vals)
+    threshold_line_params = {
+        'linewidth': 1,
+        'color': 'black',
+        'linestyle': 'dashed',
+        'alpha': 0.25
+    }
+    for val in vals:
+        ax.axhline(y=val, **threshold_line_params)
+    ax.set_xlabel('local cutvertex radius $r$')
+    ax.set_ylabel('number of $r$-local cutvertices')
+    ax.set_title(
+        'Local cutvertex radii distribution for '
+        + escape_underscore(G.name.name)
+    )
+    plt.tight_layout()
+    plt.show()
 
 def number_of_components_post_splitting_NDMJS20():
     '''
@@ -443,16 +500,19 @@ def number_of_components_post_splitting_NDMJS20():
     '''
     # Obtain subplots.
     localities: List[int] = list(range(3, 10))
-    fig, axes = plt.subplots(2, 4)
+    fig1, axes1 = plt.subplots(1, 2)
+    fig2, axes2 = plt.subplots(1, 2)
+    fig3, axes3 = plt.subplots(1, 2)
+    fig4, axes4 = plt.subplots(1, 2)
+    axes = np.hstack([axes1, axes2, axes3, axes4])
     # Obtain graphs.
     graphs: List[nx.Graph] = __get_Network_Data_MJS20_graphs()
     # Obtain graph names.
-    MAX_LENGTH: int = 15
+    MAX_LENGTH: int = 10
     graph_names: List[str] = [
-        escape_underscore(
-            graph.name.stem[:MAX_LENGTH]
-        )
-        for graph in graphs]
+        escape_underscore(graph.name.stem[:MAX_LENGTH])
+        for graph in graphs
+    ]
     # Obtain their local cutvertices.
     local_cutvertices: List[List[LocalCutvertex]] = []
     for graph in graphs:
@@ -460,9 +520,9 @@ def number_of_components_post_splitting_NDMJS20():
             local_cutvertices.append(pickle.load(handle))
     # For each locality, split all vertices larger than or equal to
     # that locality, and visualise the number of components.
-    for (i, locality), ax in zip(enumerate(localities), axes.reshape(-1)):
+    for locality, ax in zip(localities, axes.reshape(-1)):
         # Configure matplotlib axes.
-        ax.set_xticklabels(graph_names, rotation=45, ha='right')
+        ax.set_xticklabels(graph_names, rotation='vertical')
         # Obtain split graphs without local cutvertices.
         split_graphs: List[nx.Graph] = []
         for graph, lcvs in zip(graphs, local_cutvertices):
@@ -481,10 +541,7 @@ def number_of_components_post_splitting_NDMJS20():
                 inplace=False
             )
             # Remove local cutvertices from split graph.
-            split_graph: nx.Graph = nx.subgraph_view(
-                split_graph,
-                filter_node=lambda node: node not in lcvs_filtered_vertices
-            )
+            split_graph.remove_nodes_from(lcvs_filtered_vertices)
             # Add to list of split graphs.
             split_graphs.append(split_graph)
         # Find the number of connected components for each modified split graph.
@@ -493,14 +550,14 @@ def number_of_components_post_splitting_NDMJS20():
         )
         # Plot this data.
         ## Obtain interesting graphs.
-        interesting_graphs: List[str] = [
+        interesting_graphs: List[Tuple[str, int]] = [
             (graph_name, num_comp)
             for graph_name, num_comp in zip(graph_names, num_components)
-            if num_comp > 1
+            # if num_comp > 1
         ]
         ## Plot interesting graphs.
         interesting_names, interesting_num_components = zip(*interesting_graphs)
-        ax.set_yticks(interesting_num_components)
+        # ax.set_yticks(interesting_num_components)
         ax.bar(interesting_names, interesting_num_components)
         ## Add dotted lines for readibility.
         threshold_line_params = {
@@ -514,7 +571,27 @@ def number_of_components_post_splitting_NDMJS20():
         # Give a title.
         ax.set_title(f'$r \geq{locality}$')
     # Set up figure title.
-    fig.suptitle('\# components when split at local cutvertices and removed')
+    for fig in fig1, fig2, fig3, fig4:
+        fig.suptitle('\# components when split at local cutvertices and removed')
+    # Plot the number of components in the original graph.
+    fig, ax = plt.subplots(1, 1)
+    ax.set_xticklabels(graph_names, rotation=45, ha='right')
+    num_components: List[int] = list(
+        map(nx.number_connected_components, graphs)
+    )
+    ax.set_yticks(num_components)
+    ax.bar(graph_names, num_components)
+    ## Add dotted lines for readibility.
+    threshold_line_params = {
+        'linewidth': 0.2,
+        'color': 'grey',
+        'linestyle': 'dashed',
+        'alpha': 0.25
+    }
+    for num_comp in interesting_num_components:
+        ax.axhline(y=num_comp, **threshold_line_params)
+    ## Give a title.
+    ax.set_title(f'\# components original graph')
     # Show us the money.
     plt.tight_layout()
     plt.show()
@@ -522,13 +599,16 @@ def number_of_components_post_splitting_NDMJS20():
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> --- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 if __name__ == '__main__':
-    
-    # import pickle
-    # G: nx.Graph = NDMJS20['broom']
-    # with open(_pickle_name(G.name), 'rb') as handle:
-    #     local_cutvertices: List[LocalCutvertex] = pickle.load(handle)
-    # layout: callable = nx.kamada_kawai_layout
-    # draw_split_vertices(G, layout, local_cutvertices)
+    graph: str = 'net_AG'
+    min_locality: int = 7
+    try_draw_split_vertices(graph, min_locality=min_locality)
+
+    # name: str = 'net_AG'
+    # G: nx.Graph = NDMJS20[name]
+    # local_cutvertex_radii_distribution(G)
+
+    # number_of_components_post_splitting_NDMJS20()
+    # is_this_definitely_working()
 
     # layout: callable = nx.kamada_kawai_layout
     # w13_every_other_pair_of_spokes_removed(layout)
@@ -540,5 +620,3 @@ if __name__ == '__main__':
     # __radii_Network_Data_MJS20(name='howareyoudifferent')
     # NDMJS20_sorted_by_local_cutvertex_count()
     # graphs_with_no_neighbouring_local_cutvertices()
-
-    number_of_components_post_splitting_NDMJS20()
