@@ -357,7 +357,9 @@ def split_at_local_cutvertices(G: nx.Graph, local_cutvertices: List[LocalCutvert
     for lcv in local_cutvertices:
         # Go through the subsets in the edge-partition.
         subset: Tuple[Vertex, ...]
-        for i, subset in enumerate(lcv.edge_partition):
+        # Start numbering them at 1 to follow the _split_naming_convention.
+        i: int = 1
+        for subset in lcv.edge_partition:
             # Modify the subset to exclude other local cutvertices.
             subset: Tuple[Vertex, ...] = tuple(
                 vertex for vertex in subset
@@ -366,7 +368,7 @@ def split_at_local_cutvertices(G: nx.Graph, local_cutvertices: List[LocalCutvert
             if not subset:
                 continue
             # Create the split vertex first.
-            split_vertex: Vertex = _split_naming_convention(lcv.vertex, i+1)
+            split_vertex: Vertex = _split_naming_convention(lcv.vertex, i)
             # We want to remove the edges from the local cutvertex to the vertices in this subset,
             graph.remove_edges_from(
                 (lcv.vertex, neighbour) for neighbour in subset
@@ -379,6 +381,8 @@ def split_at_local_cutvertices(G: nx.Graph, local_cutvertices: List[LocalCutvert
             graph.add_edge(split_vertex, lcv.vertex)
             # Modify the split vertex attribute.
             attr[split_vertex] = True
+            # Increase the index.
+            i += 1
     # Distinguish the split vertices.
     nx.set_node_attributes(graph, attr, name='split')
     # Return the graph if necessary.
