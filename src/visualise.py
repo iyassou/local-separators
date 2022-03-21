@@ -565,9 +565,9 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: List[L
     if component_vertex_style is None:
         component_vertex_style: NodeStyle = NodeStyle(label='component vertex', alpha=0.5)
     if component_edge_style is None:
-        component_edge_style: EdgeStyle = EdgeStyle(label='component edge', alpha=0.8, width=0.8)
+        component_edge_style: EdgeStyle = EdgeStyle(label='component edge', alpha=0.8, width=1)
     if default_edge_style is None:
-        default_edge_style: EdgeStyle = EdgeStyle(label='default edge', alpha=0.5, width=0.5)
+        default_edge_style: EdgeStyle = EdgeStyle(label='default edge', alpha=0.5, width=0.2)
     if component_vertex_style.node_shape != split_vertex_style.node_shape:
         raise ValueError(f'node shape parameters must be consistent: got {component_vertex_style.node_shape!r} for component vertices and {split_vertex_style.node_shape!r} for split vertices')
     if component_vertex_style.node_shape not in MarkerSizeAreaFunction: # they're all the same here
@@ -589,7 +589,7 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: List[L
         return
 
     # Split at the local cutvertices to obtain H.
-    H: nx.Graph = split_at_local_cutvertices(G, local_cutvertices)
+    H: nx.Graph = split_at_local_cutvertices(G, local_cutvertices, inplace=False)
     # Find k, the number of components in (H - local_cutvertices).
     ## Construct a set of the local cutvertices.
     lcv_set: Set[Vertex] = set(lcv.vertex for lcv in local_cutvertices)
@@ -680,16 +680,16 @@ def draw_split_vertices(G: nx.Graph, layout: callable, local_cutvertices: List[L
         edges_G.difference_update(edgelist)
         edges_H.difference_update(edgelist)
     ## Draw the secondary edges.
-    nx.draw_networkx_edges(
-        G, pos_G, edgelist=edges_G, edge_color=vd_colours[0],
-        **default_edge_style.asdict(),
-        ax=axes[0]
-    )
-    nx.draw_networkx_edges(
-        H, pos_H, edgelist=edges_H, edge_color=vd_colours[0],
-        **default_edge_style.asdict(),
-        ax=axes[1]
-    )
+    # nx.draw_networkx_edges(
+    #     G, pos_G, edgelist=edges_G, edge_color=vd_colours[0],
+    #     **default_edge_style.asdict(),
+    #     ax=axes[0]
+    # )
+    # nx.draw_networkx_edges(
+    #     H, pos_H, edgelist=edges_H, edge_color=vd_colours[0],
+    #     **default_edge_style.asdict(),
+    #     ax=axes[1]
+    # )
     ## Draw the split vertices.
     nx.draw_networkx_nodes(
         H, pos_H, nodelist=[v for v,yup in H.nodes(data='split') if yup],
