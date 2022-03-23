@@ -2,9 +2,7 @@
     pickle.py   -   
 '''
 
-
 from . import (
-    _datasets_grouped_by_size,
     _pickle_name,
     _validate_graph_name,
 )
