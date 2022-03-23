@@ -22,6 +22,7 @@ import networkx as nx
 import pickle
 
 PROJECT_ROOT: Path          = Path(__file__).parent.parent.parent
+DATASETS_ROOT: Path         = PROJECT_ROOT / 'datasets'
 SHORTEST_PATHS_ROOT: Path   = PROJECT_ROOT / 'shortest_paths'
 
 def _shortest_paths_name(path: Path) -> Path:
@@ -270,7 +271,7 @@ class DatasetInterface:
                     else:
                         graph_shortest_paths.parent.mkdir(parents=True, exist_ok=True)
                         # nx.algorithms.shortest_paths.unweighted.all_pairs_shortest_path
-                        shortest_paths: dict = nx.all_pairs_shortest_path(G)
+                        shortest_paths: dict = dict(nx.all_pairs_shortest_path(G))
                         with open(graph_shortest_paths, 'wb') as handle:
                             pickle.dump(shortest_paths, handle, protocol=pickle.HIGHEST_PROTOCOL)
                         G.graph['shortest_paths'] = shortest_paths
