@@ -10,13 +10,11 @@ from typing import (
     Tuple,
 )
 
-import pandas as pd
-
-PROJECT_ROOT: Path      = Path(__file__).parent.parent
-SRC_ROOT: Path          = PROJECT_ROOT / 'src'
-DATASETS_ROOT: Path     = PROJECT_ROOT / 'datasets'
-MEDIA_ROOT: Path        = PROJECT_ROOT / 'media'
-PICKLE_ROOT: Path       = PROJECT_ROOT / 'pickle'
+PROJECT_ROOT: Path          = Path(__file__).parent.parent
+SRC_ROOT: Path              = PROJECT_ROOT / 'src'
+DATASETS_ROOT: Path         = PROJECT_ROOT / 'datasets'
+MEDIA_ROOT: Path            = PROJECT_ROOT / 'media'
+PICKLE_ROOT: Path           = PROJECT_ROOT / 'pickle'
 
 def _mirror_datasets_folder_structure(path: Path):
     '''
@@ -61,29 +59,6 @@ def _pickle_name(path: Path) -> Path:
 
 def _media_name(path: Path) -> Path:
     return _doppelganger(MEDIA_ROOT, path, '')
-
-def _datasets_grouped_by_size(bins: int=10) -> Dict[float, List[Path]]:
-    datasets: List[Tuple[Path, int]] = [
-        (graph, graph.stat().st_size)
-        for dataset in DATASETS_ROOT.iterdir()
-        for folder in dataset.iterdir()
-        for graph in folder.iterdir()
-    ]
-    sizes: List[int] = [y for x,y in datasets]
-    bins = pd.qcut(sizes, q=bins)
-    grouped_by_size: Dict[float, List[Path]] = {
-        _bin.right: [] for _bin in bins
-    }
-    for graph, size in datasets:
-        for prev, curr in zip(
-                list(grouped_by_size.keys())[:-1],
-                list(grouped_by_size.keys())[1:]
-            ):
-            if size <= prev:
-                grouped_by_size[prev].append(graph)
-            elif prev < size <= curr:
-                grouped_by_size[curr].append(graph)
-    return grouped_by_size
 
 def _validate_graph_name(name: Any):
     '''

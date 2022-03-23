@@ -2,7 +2,10 @@
 # - add Hamming-distance aware search for find_dataset_path? [LOL]
 # - improve code for wildcard matching in DatasetInterface
 
+from .. import _doppelganger
+
 from functools import lru_cache
+from os.path import commonpath
 from pathlib import Path
 from typing import (
     Dict,
@@ -16,11 +19,13 @@ from typing import (
 
 import importlib
 import networkx as nx
+import pickle
 
-PROJECT_ROOT: Path  = Path(__file__).parent.parent.parent
-SRC_ROOT: Path      = PROJECT_ROOT / 'src'
-DATASETS_ROOT: Path = PROJECT_ROOT / 'datasets'
-MEDIA_ROOT: Path    = PROJECT_ROOT / 'media'
+PROJECT_ROOT: Path          = Path(__file__).parent.parent.parent
+SHORTEST_PATHS_ROOT: Path   = PROJECT_ROOT / 'shortest_paths'
+
+def _shortest_paths_name(path: Path) -> Path:
+    return _doppelganger(SHORTEST_PATHS_ROOT, path, '.shortest_paths')
 
 GETITEM_RETURN_TYPE: type = Dict[str, Union['GETITEM_RETURN_TYPE', List[nx.Graph]]]
 
@@ -256,7 +261,20 @@ class DatasetInterface:
                     continue
                 if knick_knack.stem == attr:
                     # Found the dataset.
-                    return self.dataset_parser(knick_knack)
+                    G: nx.Graph = self.dataset_parser(knick_knack)
+                    # Associate the shortest_paths data.
+                    graph_shortest_paths: Path = _shortest_paths_name(G.name)
+                    if graph_shortest_paths.exists() and graph_shortest_paths.stat().st_size:
+                        with open(graph_shortest_paths, 'rb') as handle:
+                            G.graph['shortest_paths'] = pickle.load(handle)
+                    else:
+                        graph_shortest_paths.parent.mkdir(parents=True, exist_ok=True)
+                        # nx.algorithms.shortest_paths.unweighted.all_pairs_shortest_path
+                        shortest_paths: dict = nx.all_pairs_shortest_path(G)
+                        with open(graph_shortest_paths, 'wb') as handle:
+                            pickle.dump(shortest_paths, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                        G.graph['shortest_paths'] = shortest_paths
+                    return G
         # attr is neither a dataset nor a folder, sound the alarm
         raise AttributeError(f'No dataset or folder named "{attr}"')
 
