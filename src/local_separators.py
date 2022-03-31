@@ -81,17 +81,22 @@ def ball(G: nx.Graph, v: Vertex, r: Union[int, float]) -> nx.Graph:
     decimal, integral = modf(r)
     if decimal and decimal != 0.5:
         raise ValueError(f'expected integer or half-integer radius, got: "{r}"')
-    # Compute the shortest paths from the v to all other vertices in the graph G
-    # that are at most r away from v.
-    # NOTE: although sssp supports passing a float to cutoff, it doesn't result
-    # in the expected behaviour i.e. cutoff=1.5 includes paths of length 2 for
-    # some reason that I do not understand from reading the underlying source
-    # code, hence why I'm using the integral part of the radius, which results in
-    # the expected behaviour. This doesn't interfere with passing float('inf')
-    # as the radius, hence this is a, if not the, sensible fix.
-    d: Dict[Vertex, List[Vertex]] = nx.algorithms.shortest_paths.unweighted.single_source_shortest_path(
-        G, v, cutoff=integral
-    )
+    # Compute the lengths of the shortest paths from the v to all other vertices
+    # in the graph G that are at most r away from v.
+    # If G has the 'shortest_paths' attribute, it contains the lengths of the
+    # shortest paths between all pairs of vertices, in which case we can filter
+    # the paths of interest from there.
+    try:
+        shortest_paths: Dict[Dict[Vertex, int]] = G.graph['shortest_path_lengths']
+        d: Dict[Vertex, List[Vertex]] = {
+            destination: length
+            for destination, length in shortest_paths[v].items()
+            if length <= r
+        }
+    except KeyError:
+        d: Dict[Vertex, int] = nx.single_source_shortest_path_length(
+            G, v, cutoff=r
+        )
     # To obtain the ball, we need to filter out the vertices and edges to include from G.
     def filtvert(x: Vertex) -> bool:
         # The vertices in the ball are those with distance at most r from v.
@@ -99,7 +104,6 @@ def ball(G: nx.Graph, v: Vertex, r: Union[int, float]) -> nx.Graph:
     def filtedge(x: Vertex, y: Vertex) -> bool:
         # The edges xy in the ball are those that satisfy the relation:
         #       d_G(v,x) + d_G(v,y) + 1 ≤ 2 * r
-        # Recall: A path on n vertices has length n-1.
         # If the end of an edge isn't in the dictionary of shortest paths from
         # v that have length at most r, then we can't keep that end, and hence
         # cannot keep the edge.
@@ -108,9 +112,7 @@ def ball(G: nx.Graph, v: Vertex, r: Union[int, float]) -> nx.Graph:
             # in the original graph, don't keep it.
             return False
         try:
-            d_vx = len(d[x]) - 1
-            d_vy = len(d[y]) - 1
-            return d_vx + d_vy + 1 <= 2 * r
+            return d[x] + d[y] + 1 <= 2 * r
         except KeyError:
             return False
     # Return the induced subgraph view filtering using filtvert and filtedge.
@@ -270,7 +272,6 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
                 edge_partition: Set[Tuple[Vertex, ...]] = set(
                     tuple(neighbourhood.intersection(comp)) for comp in punctured_ball_components
                 )
-
                 # Add LocalCutvertex v to the list of local cutvertices.
                 local_cutvertices.append(
                     LocalCutvertex(vertex=v, locality=mid, edge_partition=edge_partition)
