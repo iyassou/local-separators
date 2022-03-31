@@ -6,12 +6,12 @@ from ..utils import pluralise
 
 from pathlib import Path
 from typing import (
-    Iterator,
+    List,
     Set,
     Tuple,
 )
 
-import networkx
+import networkx as nx
 import sys
 
 def parse_infpower_dataset(file: Path) -> nx.Graph:
@@ -25,9 +25,11 @@ def parse_infpower_dataset(file: Path) -> nx.Graph:
         # twice, and the number of edges.
         _, num_vertices, num_edges = map(int, f.readline().strip().split())
         # Subsequent lines are edges.
-        edges: Iterator[Tuple[int, int]] = map(
-            _edge_from_line,
-            f.readlines()
+        edges: List[Tuple[int, int]] = list(
+            map(
+                _edge_from_line,
+                f.readlines()
+            )
         )
     # Sanity check the number of edges.
     diff: int = num_edges - len(edges)
