@@ -74,7 +74,7 @@ _p = inflect.engine()
 _p.classical(all=True) # ew @ vertexes
 
 def pluralise(q: Union[int, float], word: str) -> str:
-    return f'{q} {_p.plural(word, q)}'
+    return f'{q} {_p.plural(word, q) if q else _p.plural(word)}'
 
 def seconds_to_string(dur: float, rounding: int=3) -> str:
     '''
