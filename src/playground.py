@@ -4,11 +4,15 @@
 
 from . import (
     _pickle_name,
+    PROJECT_ROOT
 )
 
 from .datasets import (
     Network_Data_MJS20 as NDMJS20,
-    roadNetCA
+    roadNetCA,
+    infpower,
+    stackoverflow,
+    MajorOpenRoadNetworks,
 )
 from .local_separators import (
     Vertex,
@@ -20,6 +24,11 @@ from .utils import (
     seconds_to_string as sec2str,
     escape_underscore,
     pluralise,
+    collinear,
+    path_to_str,
+    FigureSize, A0, A1, A2, A3, A4,
+    visually_distinct_colours,
+    euclidean_distance,
 )
 from .visualise import (
     draw_graph,
@@ -40,12 +49,18 @@ from typing import (
     Union,
 )
 
+import humanize
+import math
 import matplotlib
 matplotlib.rcParams['text.usetex'] = True
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import operator
 import pickle
+import random
+import shapefile
+import tabulate
 import time
 
 # UTILITIES
@@ -469,6 +484,7 @@ def local_cutvertex_radii_distribution(G: nx.Graph):
         local_cutvertices: List[LocalCutvertex] = pickle.load(handle)
     c = Counter(lcv.locality for lcv in local_cutvertices)
     keys, vals = c.keys(), c.values()
+    total: int = sum(vals)
     fig, ax = plt.subplots(1, 1)
     ax.set_yticks(list(vals))
     ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
@@ -487,6 +503,7 @@ def local_cutvertex_radii_distribution(G: nx.Graph):
     ax.set_title(
         'Local cutvertex radii distribution for '
         + escape_underscore(G.name.name)
+        + f' ({pluralise(total, "local cutvertex")})'
     )
     plt.tight_layout()
     plt.show()
@@ -596,12 +613,541 @@ def number_of_components_post_splitting_NDMJS20():
     plt.tight_layout()
     plt.show()
 
+def __get_MORN() -> nx.Graph:
+    return MajorOpenRoadNetworks['Major_Road_Network_2018_Open_Roads']
+
+def redundant_points_MORN(G: nx.Graph=None) -> List[Vertex]:
+    '''
+        Returns a list of redundant points in the Major_Road_Network_2018_Open_Roads dataset.
+
+        Parameters
+        ----------
+        G: nx.Graph, optional
+            The graph corresponding to the MORN dataset. If None, will be retrieved.
+        
+        Notes
+        -----
+        A point is redundant if it is collinear with its 2 neighbours, and non-trivial otherwise.
+        
+        Returns
+        -------
+        List[Vertex]
+            The redundant points.
+    '''
+    if G is None:
+        G: nx.Graph = __get_MORN()
+    redundant: List[Vertex] = []
+    for vertex, X in G.graph['pos'].items():
+        if G.degree(vertex) != 2:
+            continue
+        Y, Z = [G.graph['pos'][x] for x in G.neighbors(vertex)]
+        if collinear(X, Y, Z):
+            redundant.append(vertex)
+    return redundant
+
+def analyse_MORN(how_many: int):
+    '''
+        This functions runs some stats on the Major_Road_Network_2018_Open_Roads dataset,
+        including:
+        
+        - redundant points
+        - differences between redundant points and their neighbours
+
+        Notes
+        -----
+        A point is redundant if it is collinear with its 2 neighbours, and non-trivial otherwise.
+    '''
+    # Obtain the dataset and the corresponding graph.
+    dataset: str = 'Major_Road_Network_2018_Open_Roads'
+    zip_file: Path = (MajorOpenRoadNetworks.dataset_folder() / dataset).with_suffix('.zip')
+    G: nx.Graph = MajorOpenRoadNetworks[dataset]
+    # Find the redundant points.
+    redundant: List[Vertex] = redundant_points_MORN(G)
+    print('There are', len(redundant), 'redundant points in the MORN dataset.')
+    # Compare the information of some of the redundant points with their neighbours.
+    lucky_few: List[Vertex] = random.sample(redundant, how_many)
+    neighbours: List[Tuple[Vertex, Vertex]] = [
+        tuple(G.neighbors(lucky)) for lucky in lucky_few
+    ]
+    with shapefile.Reader(path_to_str(zip_file)) as shp:
+        shape_records: List[Tuple[shapefile.ShapeRecord, shapefile.ShapeRecord, shapefile.ShapeRecord]] = [
+            (shp.shapeRecord(lucky), shp.shapeRecord(x), shp.shapeRecord(y))
+            for lucky,(x,y) in zip(lucky_few, neighbours)
+        ]
+    shape_fields_to_compare = [
+        'parts',
+    ]
+    # Choose which fields to compare.
+    # Frontrunner idea is comparing the ShapeRecord.shape.parts fields, if they're distinct then the point is
+    # no longer redundant imo.
+    for i in range(how_many):
+        data = [
+            [
+                getattr(shprec.shape, field) for field in shape_fields_to_compare
+            ] for shprec in shape_records[i]
+        ]
+        for i, name in enumerate(('Redundant', 'Neighbour A', 'Neighbour B')):
+            data[i].insert(0, name)
+        table = tabulate.tabulate(
+            data,
+            headers=['Point'] + shape_fields_to_compare
+        )
+        print('Redundant Entry', i)
+        print('='*40)
+        print(table)
+
+def compare_MORN_redundant_points():
+    '''
+        Plots the graph corresponding to the Major_Road_Network_2018_Open_Roads dataset
+        and the MORN dataset with its redundant points removed side-by-side.
+    '''
+    # Obtain MORN dataset graph.
+    G: nx.Graph = __get_MORN()
+    # Obtain redundant points.
+    redundant: List[Vertex] = redundant_points_MORN(G)
+    savings_ratio: float = 1 - (G.number_of_nodes() - len(redundant)) / G.number_of_nodes()
+    savings_percentage: float = round(savings_ratio * 100, 2)
+    # Remove redundant points from G.
+    H: nx.Graph = G.copy()
+    H.add_edges_from(
+        [tuple(H.neighbors(vertex)) for vertex in redundant]
+    )
+    H.remove_nodes_from(redundant)
+    # Obtain matplotlib plot.
+    fig, axes = plt.subplots(1, 2)
+    fig.set_size_inches(A4[0]*2, A4[1])
+    fig.set_dpi(1200)
+    # Plot G.
+    nx.draw(G, G.graph['pos'], node_size=1, node_color='red', edge_color='gray', ax=axes[0])
+    axes[0].set_title('Graph $G$ representing the MORN dataset')
+    # Plot H.
+    nx.draw(H, H.graph['pos'], node_size=1, edge_color='gray', ax=axes[1])
+    axes[1].set_title(f'Graph $H$, a ${savings_percentage}$\% more lightweight representation of $G$')
+    # Show me.
+    plt.savefig('huh.png')
+
+def large_plot_MORN(G: nx.Graph=None, node_color: str='red', fname: str='large_plot.png', figure_size: FigureSize=A3, dpi: int=1200):
+    if G is None:
+        G: nx.Graph = __get_MORN()
+    fig, ax = plt.gcf(), plt.gca()
+    fig.set_facecolor('xkcd:pale green')
+    fig.set_size_inches(*figure_size)
+    fig.set_dpi(dpi)
+    nx.draw(G, G.graph['pos'], node_size=0., node_color=node_color, edge_color='gray', ax=ax)
+    plt.savefig(fname, dpi=dpi)
+
+def random_plot_MORN_components(how_many: int, G: nx.Graph=None):
+    if G is None:
+        G: nx.Graph = __get_MORN()
+    # Obtain layout.
+    pos = G.graph['pos']
+    # Obtain components.
+    components: List[Set[Vertex]] = list(nx.connected_components(G))
+    # Sanity check.
+    assert how_many <= len(components), 'b r u h'
+    # See that I have enough colours.
+    try:
+        node_colours = visually_distinct_colours(how_many)
+    except NotImplementedError:
+        raise ValueError(f'cannot plot {how_many} components, sorry')
+    # Sort out number of rows and columns.
+    square_root: float = math.sqrt(how_many)
+    decimal, integral = math.modf(square_root)
+    if not decimal:
+        nrows = ncols = int(square_root)
+    # Want a long rectangle plot, not a tall one.
+    elif decimal < 0.5:
+        nrows: int = int(integral)
+        ncols: int = math.ceil(square_root)
+    else:
+        nrows: int = int(integral)
+        ncols: int = math.ceil(square_root) + 1
+    # Obtain figure and axes.
+    fig, axes = plt.subplots(nrows, ncols)
+    fig.suptitle(f'${how_many}$ randomly chosen components from the MORN dataset')
+    axes = axes.reshape(-1)
+    # Randomly choose components.
+    components_to_highlight: List[Set[Vertex]] = random.sample(components, how_many)
+    # Plot.
+    for ax, component_to_highlight, node_colour in zip(axes, components_to_highlight, node_colours):
+        ax.set_title(f'${len(component_to_highlight)}$ vertices')
+        component_edges_to_highlight: List[Tuple[Vertex, Vertex]] = [
+            (x,y) for x,y in G.edges()
+            if x in component_to_highlight and y in component_to_highlight
+        ]
+        nx.draw_networkx_nodes(G, pos, node_size=10, nodelist=component_to_highlight, node_color=node_colour, ax=ax)
+        nx.draw_networkx_edges(G, pos, edgelist=component_edges_to_highlight, edge_color='k', ax=ax)
+    # Show me the money.
+    plt.show()
+
+def leaves_inter_node_distance_MORN(G: nx.Graph=None):
+    from itertools import chain
+    from scipy.spatial.distance import pdist
+
+    if G is None:
+        G: nx.Graph = __get_MORN()
+    pos = G.graph['pos']
+
+    leaves: List[Vertex] = [node for node in G.nodes() if G.degree(node) == 1]
+    positions: List[Tuple[float, float]] = [pos[leaf] for leaf in leaves]
+
+    # Imagine a square matrix of the inter-leaf distances in G.
+    # I want the upper triangular part of that matrix, definitely
+    # excluding the diagonal.
+    print('Computing distances...')
+    points: np.ndarray = np.array(positions)
+    start: float = time.perf_counter()
+    distances: np.ndarray = pdist(points)
+    end: float = time.perf_counter()
+    print(distances.shape)
+    exit()
+    distances = distances.reshape(-1)
+    print(f'Computed {pluralise(len(distances), "pairwise distance")} in {sec2str(end-start)}.')
+    # Plot distances.
+    bins = [0, .25, .5, .75, 1, 10, 100, 1_000, 10_000, 100_000, 750_000]
+    plt.xscale('log')
+    plt.yscale('log')
+    print('Plotting distances...')
+    start: float = time.perf_counter()
+    plt.hist(distances, bins=bins)
+    end: float = time.perf_counter()
+    print(f'Plotted data in {sec2str(end-start)}.')
+    plt.show()
+
+def closest_non_component_leaf_MORN(G: nx.Graph=None, print_every: int=500, bins: int=50) -> Dict[Vertex, Tuple[Vertex, float]]:
+    # If a pickle result exists, use that, if not go ahead with the whole shabang.
+    filename: Path = PROJECT_ROOT / 'closest_non_component_leaf.pickle'
+
+    if not (filename.exists() and filename.stat().st_size > 0):
+        from scipy.spatial.distance import pdist
+        from scipy.special import comb
+
+        if G is None:
+            G: nx.Graph = __get_MORN()
+        pos = G.graph['pos']
+
+        leaves: np.ndarray = np.array([node for node in G.nodes() if G.degree(node) == 1])
+        print(f'Processing {pluralise(len(leaves), "leaf")}...')
+        points: np.ndarray = np.array([pos[leaf] for leaf in leaves])
+
+        # Compute distances.
+        print('Computing distances...')
+        start: float = time.perf_counter()
+        distance_vector: np.ndarray = pdist(points)
+        end: float = time.perf_counter()
+        print(f'Computed {pluralise(len(distance_vector), "pairwise distance")} in {sec2str(end-start)}.')
+        
+        # For each leaf, find its nearest leaf neighbour that isn't in the same component.
+        m: int = len(points)
+        def get_distance(i: int, j: int) -> float:
+            '''Returns the distance between the leaves at indices i and j'''
+            # If identical indices then 0.
+            if i == j:
+                return 0
+            # Require i < j.
+            i, j = min(i, j), max(i, j)
+            # Refer to: https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html
+            idx: int = m * i + j - ((i + 2) * (i + 1)) // 2
+            return distance_vector[idx]
+        print('Obtaining connected components...')
+        components: List[Set[Vertex]] = list(nx.connected_components(G))
+        component_id: Dict[Vertex, int] = {
+            v: i
+            for i in range(len(components))
+            for v in components[i]
+        }
+        components.clear()
+        print('Obtained connected components.')
+        closest_non_component_leaf: Dict[Vertex, Tuple[Vertex, float]] = {}
+        print('Finding closest non-component leaves...')
+        overall_start: float = time.perf_counter()
+        start: float = time.perf_counter()
+        for i, leaf in enumerate(leaves):
+            if i and not (i % print_every):
+                now: float = time.perf_counter()
+                print(f'Processed {pluralise(i, "leaf")} in {sec2str(now - start)}.')
+                start = now
+            # Obtain the distances from the current leaf to all other leaves.
+            distances: np.ndarray = np.array([get_distance(i, j) for j in range(m)])
+            # Argsort the distances in ascending order.
+            arg_sort: np.ndarray = np.argsort(distances)
+            # Use arg_sort on the leaves.
+            for other_leaf, distance in zip(leaves[arg_sort], distances[arg_sort]):
+                # Find the closest non-component leaf.
+                if leaf == other_leaf:
+                    continue
+                if component_id[leaf] == component_id[other_leaf]:
+                    continue
+                # FOUND!
+                closest_non_component_leaf[leaf] = (other_leaf, distance)
+        overall_end: float = time.perf_counter()
+        print(f'Found closest non-component leaves in {sec2str(overall_end - overall_start)}.')
+
+        # Save result.
+        filename: Path = PROJECT_ROOT / 'closest_non_component_leaf.pickle'
+        print('Saving result...')
+        with open(filename, 'wb') as handle:
+            pickle.dump(closest_non_component_leaf, handle)
+        print(f'Saved result ({humanize.naturalsize(filename.stat().st_size)}).')
+    else:
+        print(f'Loading saved result ({humanize.naturalsize(filename.stat().st_size)})...')
+        with open(filename, 'rb') as handle:
+            closest_non_component_leaf: Dict[Vertex, Tuple[Vertex, float]] = pickle.load(handle)
+        print('Loaded saved result.')
+
+    # Plot the distribution of closest non-component leaf distances.
+    # print('Plotting distribution of closest non-component leaf distances...')
+    # start: float = time.perf_counter()
+    # plt.hist([d for _,d in closest_non_component_leaf.values()], bins=bins)
+    # end: float = time.perf_counter()
+    # print(f'Plotted distribution in {sec2str(end-start)}.')
+    # plt.show()
+    return closest_non_component_leaf
+
+def look_at_how_bad_cncl_MORN_is():
+    G: nx.Graph = __get_MORN()
+    pos = G.graph['pos']
+    connected_components: List[Set[Vertex]] = list(nx.connected_components(G))
+    closest_non_component_leaf: Dict[Vertex, Tuple[Vertex, float]] = closest_non_component_leaf_MORN(G)
+    items = list(closest_non_component_leaf.items())
+    random.shuffle(items)
+    for leaf, (closest_leaf, distance) in items:
+        leaf_component: Set[Vertex] = next(comp for comp in connected_components if leaf in comp)
+        closest_leaf_component: Set[Vertex] = next(
+            comp for comp in connected_components if closest_leaf in comp
+        )
+        fig, ax = plt.subplots()
+        ax.set_title(f'Distance: ${distance}$')
+        excluded: Set[Vertex] = G.nodes() - leaf_component - closest_leaf_component
+        
+        nx.draw_networkx_nodes(G, pos, nodelist=excluded, node_size=1, alpha=0.2)
+        nx.draw_networkx_edges(G, pos, edgelist=[(x,y) for x,y in G.edges() if x in excluded and y in excluded], alpha=0.1)
+        
+        nx.draw_networkx_nodes(G, pos, nodelist=leaf_component - {leaf}, node_size=5, alpha=0.4, node_color='g')
+        nx.draw_networkx_edges(G, pos, edgelist=[(x,y) for x,y in G.edges() if x in leaf_component and y in leaf_component], alpha=0.4, edge_color='g')
+        
+        nx.draw_networkx_nodes(G, pos, nodelist=closest_leaf_component - {closest_leaf}, node_size=5, alpha=0.4, node_color='purple')
+        nx.draw_networkx_edges(G, pos, edgelist=[(x,y) for x,y in G.edges() if x in closest_leaf_component and y in closest_leaf_component], alpha=0.4, edge_color='purple')
+        
+        nx.draw_networkx_nodes(G, pos, nodelist=[leaf], node_size=10, node_color='r')
+        nx.draw_networkx_nodes(G, pos, nodelist=[closest_leaf], node_size=10, node_color='hotpink')
+
+        plt.show()
+
+def closest_non_component_vertex_MORN(G: nx.Graph=None, plotting: bool=False, save_every: int=200):
+    if G is None:
+        G: nx.Graph = __get_MORN()
+    pos = G.graph['pos']
+
+    nodes: List[Vertex] = list(G.nodes())
+    filename: Path = PROJECT_ROOT / 'MORN' / f'closest_non_component_vertex.pickle'
+    if not (filename.exists() and filename.stat().st_size > 0):
+        # I need to find the closest non-component vertex to each vertex.
+        # Approach A: let's first compute the distances from vertex to all non-component vertices.
+        print('<CNCV> No savepoint found, starting from scratch...')
+        checkpoint_vertex: int = 0
+        closest_non_component_vertices: Dict[Vertex, Tuple[Vertex, float]] = {}
+    else:
+        print('<CNCV> Savepoint found! Loading...')
+        with open(filename, 'rb') as handle:
+            checkpoint_vertex: int
+            closest_non_component_vertices: Dict[Vertex, Tuple[Vertex, float]]
+            try:
+                data = pickle.load(handle)
+                checkpoint_vertex, closest_non_component_vertices = data
+            except ValueError:
+                # Assume the routine has run until completion in the past.
+                print('<CNCV> Routine previously successfully completed.')
+                closest_non_component_vertices = data
+                return closest_non_component_vertices
+        print(f'<CNCV> [{checkpoint_vertex}/{len(nodes)}] Savepoint loaded.')
+    start: float = time.perf_counter()
+    for i, vertex in enumerate(nodes[checkpoint_vertex:]):
+        if i and not i % save_every:
+            now: float = time.perf_counter()
+            with open(filename, 'wb') as handle:
+                pickle.dump((checkpoint_vertex + i, closest_non_component_vertices), handle)
+            print(' '*100 + '\r', end='')
+            print(f'[{checkpoint_vertex + i}/{len(nodes)}] Processed {save_every} vertices in {sec2str(now - start)} ...\r', end='')
+            start = now
+        # Find the vertex's component.
+        component: Set[Vertex] = nx.node_connected_component(G, vertex)
+        # Store all the other vertices.
+        vertices: np.ndarray = np.array([node for node in G.nodes() - component])
+        points: np.ndarray = np.array([pos[node] for node in vertices])
+        # Duplicate vertex's Cartesian coordinates.
+        vertex_pos: np.ndarray = np.array([pos[vertex]])
+        vertex_pos: np.ndarray = np.vstack([vertex_pos for _ in range(points.shape[0])])
+        # Compute the distance from vertex to all the other vertices.
+        distances: np.ndarray = np.linalg.norm(points - vertex_pos, axis=1)
+        # np.argsort to find the closest non-component vertex.
+        argsort: np.ndarray = np.argsort(distances)
+        distance: float = distances[argsort][0]
+        closest_non_component_vertex: Vertex = vertices[argsort][0]
+        # Add to dictionary.
+        closest_non_component_vertices[vertex] = (closest_non_component_vertex, distance)
+    print('Saving result...')
+    with open(filename, 'wb') as handle:
+        pickle.dump(closest_non_component_vertices, handle)
+    print(f'Saved result ({humanize.naturalsize(filename.stat().st_size)}).')
+    
+    # Plot the closest non-component vertex and vertex of interest on the big graph.
+    if plotting:
+        raise NotImplementedError('b r u h')
+        fig, ax = plt.subplots()
+        ax.set_title(f'Distance: ${distance}$')
+        nx.draw_networkx_nodes(G, pos, nodelist=G.nodes() - {vertex, closest_non_component_vertex}, node_size=1, alpha=0.1, ax=ax)
+        for node, colour, size in zip([vertex, closest_non_component_vertex], ['red', 'green'], [20, 10]):
+            nx.draw_networkx_nodes(G, pos, nodelist=[node], node_size=size, node_color=colour, ax=ax)
+        nx.draw_networkx_edges(G, pos, edgelist=G.edges(), alpha=0.1, width=0.1, ax=ax)
+        plt.show()
+
+def look_at_cncv_MORN():
+    G: nx.Graph = __get_MORN()
+    pos = G.graph['pos']
+    closest_non_component_vertices: Dict[Vertex, Tuple[Vertex, float]] = closest_non_component_vertex_MORN(G)
+    distances: List[float] = list(map(operator.itemgetter(1), closest_non_component_vertices.values()))
+    zeros: int = distances.count(0)
+    print('We have', pluralise(zeros, 'overlapping point'))
+    exit()
+    bins = [0, .1, .25, .5, .75, 1, 10, 100, 1_000, 2_000, 3_000, 5_000]
+    plt.xscale('log')
+    plt.yscale('log')
+    print('Plotting distances...')
+    start: float = time.perf_counter()
+    counts, edges, bars = plt.hist(distances, bins=bins)
+    end: float = time.perf_counter()
+    print(f'Plotted data in {sec2str(end-start)}.')
+    plt.bar_label(bars)
+    plt.show()
+
+def overlapping_groups_MORN(G: nx.Graph=None, save_every: int=200) -> List[Set[Vertex]]:
+    if G is None:
+        G: nx.Graph = __get_MORN()
+    pos = G.graph['pos']
+    filename: Path = PROJECT_ROOT / 'MORN' / 'overlapping_groups.pickle'
+    closest_non_component_vertices: Dict[Vertex, Tuple[Vertex, float]] = closest_non_component_vertex_MORN(G)
+    overlapping_points: List[Tuple[Vertex, Vertex]] = [
+        (k,v) for k,(v,d) in closest_non_component_vertices.items() if not d
+    ]
+    if not (filename.exists() and filename.stat().st_size > 0):
+        # No checkpoint, start from scratch.
+        checkpoint: int = 0
+        groups: List[Set[Vertex]] = []
+    else:
+        # Potential checkpoint, try loading.
+        checkpoint: int
+        groups: List[Set[Vertex]]
+        with open(filename, 'rb') as handle:
+            data = pickle.load(handle)
+            try:
+                checkpoint, groups = data
+                print(f'<OG> [{checkpoint}/{len(overlapping_points)}] Checkpoint found!')
+            except ValueError:
+                print('<OG> Routine previously ran to completion, returning result...')
+                return data
+    for i, (group_coordinator,closest) in enumerate(overlapping_points[checkpoint:]):
+        # Begin by checking if a group has already been created for either the group
+        # coordinator or its closest vertex.
+        try:
+            group: Set[Vertex] = next(
+                group for group in groups
+                if group_coordinator in group or closest in group
+            )
+            # Group found, add both to the group (set.add deals with potential redundancy).
+            group.add(group_coordinator)
+            group.add(closest)
+            # Carry on.
+            continue
+        except StopIteration:
+            # A group entry hasn't been made for either vertices under consideration,
+            # proceed with the routine and create one for them.
+            pass
+        # Are we saving the result (and simultaneously, outputting information)?
+        debug: bool = len(groups) and not len(groups) % save_every
+        if debug:
+            print(f'Creating group #{len(groups)+1}...' + ' '*30 + '\r', end='')
+        # Create starting group.
+        group: Set[Vertex] = {group_coordinator, closest}
+        # Go through vertices hoping to expand the group.
+        for vertex in closest_non_component_vertices:
+            if pos[vertex] == pos[group_coordinator]:
+                group.add(vertex)
+        # Add group to list of groups.
+        groups.append(group)
+        # Save progress if necessary.
+        if debug:
+            with open(filename, 'wb') as handle:
+                pickle.dump((i, groups), handle)
+    print('<OG> Overlapping groups of points established, saving global result...')
+    with open(filename, 'wb') as handle:
+        pickle.dump(groups, handle)
+    print(f'<OG> Saved result ({humanize.naturalsize(filename.stat().st_size)}).')
+    print('<OG> Returning result...')
+    return groups
+
+def attempt_to_resolve_MORN_using_cncv(G: nx.Graph=None):
+    '''
+        MORN resolution strategy:
+            1) Find the groups of overlapping vertices.
+            2) Merge all neighbours in the group to a single member.
+            3) Delete all other members of the group.
+            4) Repeat 1-3 until all groups addressed.
+            5) Count number of components.
+    '''
+    if G is None:
+        G: nx.Graph = __get_MORN()
+    pos = G.graph['pos']
+    groups: List[Set[Vertex]] = overlapping_groups_MORN(G=G)
+    starting_component_count: int = nx.number_connected_components(G)
+    
+    sizes: List[int] = list(map(len, groups))
+    counts, edges, bars = plt.hist(sizes)
+    plt.bar_label(bars)
+    plt.show()
+    
+def stackoverflow_interesting_components(G: nx.Graph=None):
+    if G is None:
+        G: nx.Graph = stackoverflow['stackoverflow']
+    with open(_pickle_name(G.name), 'rb') as handle:
+        local_cutvertices: List[LocalCutvertex] = pickle.load(handle)
+    lcvs: Set[Vertex] = set(lcv.vertex for lcv in local_cutvertices)
+    H: nx.Graph = split_at_local_cutvertices(G, local_cutvertices)
+    H.remove_nodes_from(lcvs)
+    
+    # Ok, now let's look at the interesting components.
+    for comp in nx.connected_components(H):
+        if any(H.nodes[node].get('split', False) for node in comp):
+            print('Interesting component found!')
+            print(comp)
+
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> --- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 if __name__ == '__main__':
-    graph: str = 'net_AG'
-    min_locality: int = 7
-    try_draw_split_vertices(graph, min_locality=min_locality)
+    # look_at_cncv_MORN()
+    # attempt_to_resolve_MORN_using_cncv()
+    _ = overlapping_groups_MORN()
+
+
+    # leaves_inter_node_distance_MORN(G=G)
+
+    # HOW_MANY: int = 25
+    # random_plot_MORN_components(HOW_MANY, G=G)
+
+    # nx.draw(G, G.graph['pos'], node_size=1, node_color='red', edge_color='gray')
+    # figure_size: FigureSize = A2
+    # dpi: int = 1200
+
+    # large_plot_MORN(G=G, figure_size=figure_size, dpi=dpi)
+    # compare_MORN_redundant_points()
+    # how_many: int = 5
+    # analyse_MORN(how_many)
+    # local_cutvertex_radii_distribution(G)
+    # __get_Network_Data_MJS20_graphs()
+
+    # graph: str = 'net_AG'
+    # min_locality: int = 7
+    # try_draw_split_vertices(graph, min_locality=min_locality)
 
     # name: str = 'net_AG'
     # G: nx.Graph = NDMJS20[name]
