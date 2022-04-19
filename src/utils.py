@@ -5,6 +5,7 @@
 from .local_separators import Vertex
 
 from math import sqrt
+from pathlib import Path
 from typing import (
     Dict,
     List,
@@ -21,7 +22,11 @@ import numpy.typing as npt
 Point2d = npt.NDArray[np.float64]
 FigureSize = Tuple[float, float]
 
-A4: FigureSize = (8.25, 11.75)
+A0: FigureSize = (33.125, 46.8125)
+A1: FigureSize = (23.375, 33.125)
+A2: FigureSize = (16.5,   23.375)
+A3: FigureSize = (11.75,  16.5)
+A4: FigureSize = (8.25,   11.75)
 
 class BoundingBox2d:
     STR_ROUNDING: int       = 3
@@ -269,3 +274,47 @@ def visually_distinct_colours(k: int) -> List:
     if k > len(palette):
         raise NotImplementedError(f'cannot return more than {len(palette)} visually distinct colours')
     return palette[:k]
+
+def path_to_str(p: Path) -> str:
+    return str(p.resolve())
+
+def collinear(X: Tuple[float, float], Y: Tuple[float, float], Z: Tuple[float, float]) -> bool:
+    '''
+        Says whether or not the three points are collinear.
+
+        Parameters
+        ----------
+        X: Tuple[float, float]
+        Y: Tuple[float, float]
+        Z: Tuple[float, float]
+
+        Notes
+        -----
+        Three points in the plane :math:`X=\begin{pmatrix}x_1&x_2\end{pmatrix}`, :math:`Y=\begin{pmatrix}y_1&y_2\end{pmatrix}`,
+        :math:`Z=\begin{pmatrix}z_1&z_2\end{pmatrix}` are collinear if the matrix
+
+        .. math::
+            \begin{pmatrix}
+            a & b & c \\
+            d & e & f \\
+            g & h & i
+            \end{pmatrix}
+            =
+            \begin{pmatrix}
+            1 & x_1 & x_2 \\
+            1 & y_1 & y_2 \\
+            1 & z_1 & z_2 \\
+            \end{pmatrix}
+
+        has determinant zero.
+
+        Returns
+        -------
+        bool
+    '''
+    # a = d = g = 1, and since we're multiplying by them
+    # they're unnecessary
+    b, c = X
+    e, f = Y
+    h, i = Z
+    return not (e*i + b*f + c*h - c*e - b*i - f*h)
