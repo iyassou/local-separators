@@ -550,6 +550,101 @@ def definition_splitting_local_cutvertex():
     # showmepls
     plt.show()
 
+def CNCL_MORN():
+    G: nx.Graph = __get_MORN()
+    pos = G.graph['pos']
+    connected_components: List[Set[Vertex]] = list(nx.connected_components(G))
+    closest_non_component_leaf: Dict[Vertex, Tuple[Vertex, float]] = closest_non_component_leaf_MORN(G)
+    items = list(closest_non_component_leaf.items())
+    random.shuffle(items)
+    for leaf, (closest_leaf, distance) in items:
+        leaf_component: Set[Vertex] = next(comp for comp in connected_components if leaf in comp)
+        closest_leaf_component: Set[Vertex] = next(
+            comp for comp in connected_components if closest_leaf in comp
+        )
+        fig, ax = plt.subplots()
+        ax.set_title(f'Distance: ${distance}$')
+        excluded: Set[Vertex] = G.nodes() - leaf_component - closest_leaf_component
+        
+        nx.draw_networkx_nodes(G, pos, nodelist=excluded, node_size=1, alpha=0.2)
+        nx.draw_networkx_edges(G, pos, edgelist=[(x,y) for x,y in G.edges() if x in excluded and y in excluded], alpha=0.1)
+        
+        nx.draw_networkx_nodes(G, pos, nodelist=leaf_component - {leaf}, node_size=5, alpha=0.4, node_color='g')
+        nx.draw_networkx_edges(G, pos, edgelist=[(x,y) for x,y in G.edges() if x in leaf_component and y in leaf_component], alpha=0.4, edge_color='g')
+        
+        nx.draw_networkx_nodes(G, pos, nodelist=closest_leaf_component - {closest_leaf}, node_size=5, alpha=0.4, node_color='purple')
+        nx.draw_networkx_edges(G, pos, edgelist=[(x,y) for x,y in G.edges() if x in closest_leaf_component and y in closest_leaf_component], alpha=0.4, edge_color='purple')
+        
+        nx.draw_networkx_nodes(G, pos, nodelist=[leaf], node_size=10, node_color='r')
+        nx.draw_networkx_nodes(G, pos, nodelist=[closest_leaf], node_size=10, node_color='hotpink')
+
+        plt.show()
+
+def CNCV_MORN():
+    G: nx.Graph = __get_MORN()
+    pos = G.graph['pos']
+    closest_non_component_vertices: Dict[Vertex, Tuple[Vertex, float]] = closest_non_component_vertex_MORN(G)
+    distances: List[float] = list(map(operator.itemgetter(1), closest_non_component_vertices.values()))
+    zeros: int = distances.count(0)
+    print('We have', pluralise(zeros, 'overlapping point'))
+    exit()
+    bins = [0, .1, .25, .5, .75, 1, 10, 100, 1_000, 2_000, 3_000, 5_000]
+    plt.xscale('log')
+    plt.yscale('log')
+    print('Plotting distances...')
+    start: float = time.perf_counter()
+    counts, edges, bars = plt.hist(distances, bins=bins)
+    end: float = time.perf_counter()
+    print(f'Plotted data in {sec2str(end-start)}.')
+    plt.bar_label(bars)
+    plt.show()
+
+def OG_MORN():
+    '''
+        Visualise number of and size of overlapping groups of vertices
+        in the MORN dataset.
+    '''
+    # Obtain the dataset.
+    G: nx.Graph = __get_MORN()
+    # Obtain the overlapping groups.
+    groups: List[Set[Vertex]] = overlapping_groups_MORN(G)
+    # Obtain their sizes.
+    sizes: List[int] = list(map(len, groups))
+    overlapping_points: int = sum(sizes)
+    num_nodes: int = G.number_of_nodes()
+    non_overlapping_points: int = num_nodes - overlapping_points
+    # Create Counter from sizes.
+    c = Counter(sizes)
+    c[1] = non_overlapping_points
+    # Add non-overlapping points.
+    # Plot sizes.
+    fig, ax = plt.subplots()
+    keys, vals = c.keys(), c.values()
+    fig = plt.gcf()
+    fig.set_size_inches(5, 3)
+    ax = plt.gca()
+    ax.set_yscale('log')
+    ax.set_yticks(list(vals))
+    ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    ax.minorticks_off()
+    ax.bar(keys, vals)
+    threshold_line_params = {
+        'linewidth': 1,
+        'color': 'black',
+        'linestyle': 'dashed',
+        'alpha': 0.25
+    }
+    for val in vals:
+        ax.axhline(y=val, **threshold_line_params)
+    ax.set_xlabel('size of group of overlapping coordinates')
+    ax.set_ylabel('number of overlapping groups')
+    ax.set_title(
+        'Sizes of overlapping groups of vertices in the Major Road Network dataset '
+        + f'({pluralise(num_nodes, "vertex")})'
+    )
+    plt.tight_layout()
+    plt.show()
+
 # QUICK PROTOTYPING (lol, find an accurate name)
 
 def split_vertices():
@@ -1014,8 +1109,8 @@ def large_plot_MORN(G: nx.Graph=None, node_color: str='red', fname: str='large_p
     fig.set_size_inches(*figure_size)
     fig.set_dpi(dpi)
     nx.draw(G, G.graph['pos'], node_size=0., node_color=node_color, edge_color='gray', ax=ax)
-    plt.show()
-    # plt.savefig(fname, dpi=dpi)
+    # plt.show()
+    plt.savefig(fname, dpi=dpi)
 
 def random_plot_MORN_components(how_many: int, G: nx.Graph=None):
     if G is None:
@@ -1185,36 +1280,6 @@ def closest_non_component_leaf_MORN(G: nx.Graph=None, print_every: int=500, bins
     # plt.show()
     return closest_non_component_leaf
 
-def look_at_how_bad_cncl_MORN_is():
-    G: nx.Graph = __get_MORN()
-    pos = G.graph['pos']
-    connected_components: List[Set[Vertex]] = list(nx.connected_components(G))
-    closest_non_component_leaf: Dict[Vertex, Tuple[Vertex, float]] = closest_non_component_leaf_MORN(G)
-    items = list(closest_non_component_leaf.items())
-    random.shuffle(items)
-    for leaf, (closest_leaf, distance) in items:
-        leaf_component: Set[Vertex] = next(comp for comp in connected_components if leaf in comp)
-        closest_leaf_component: Set[Vertex] = next(
-            comp for comp in connected_components if closest_leaf in comp
-        )
-        fig, ax = plt.subplots()
-        ax.set_title(f'Distance: ${distance}$')
-        excluded: Set[Vertex] = G.nodes() - leaf_component - closest_leaf_component
-        
-        nx.draw_networkx_nodes(G, pos, nodelist=excluded, node_size=1, alpha=0.2)
-        nx.draw_networkx_edges(G, pos, edgelist=[(x,y) for x,y in G.edges() if x in excluded and y in excluded], alpha=0.1)
-        
-        nx.draw_networkx_nodes(G, pos, nodelist=leaf_component - {leaf}, node_size=5, alpha=0.4, node_color='g')
-        nx.draw_networkx_edges(G, pos, edgelist=[(x,y) for x,y in G.edges() if x in leaf_component and y in leaf_component], alpha=0.4, edge_color='g')
-        
-        nx.draw_networkx_nodes(G, pos, nodelist=closest_leaf_component - {closest_leaf}, node_size=5, alpha=0.4, node_color='purple')
-        nx.draw_networkx_edges(G, pos, edgelist=[(x,y) for x,y in G.edges() if x in closest_leaf_component and y in closest_leaf_component], alpha=0.4, edge_color='purple')
-        
-        nx.draw_networkx_nodes(G, pos, nodelist=[leaf], node_size=10, node_color='r')
-        nx.draw_networkx_nodes(G, pos, nodelist=[closest_leaf], node_size=10, node_color='hotpink')
-
-        plt.show()
-
 def closest_non_component_vertex_MORN(G: nx.Graph=None, plotting: bool=False, save_every: int=200):
     if G is None:
         G: nx.Graph = __get_MORN()
@@ -1282,25 +1347,6 @@ def closest_non_component_vertex_MORN(G: nx.Graph=None, plotting: bool=False, sa
             nx.draw_networkx_nodes(G, pos, nodelist=[node], node_size=size, node_color=colour, ax=ax)
         nx.draw_networkx_edges(G, pos, edgelist=G.edges(), alpha=0.1, width=0.1, ax=ax)
         plt.show()
-
-def look_at_cncv_MORN():
-    G: nx.Graph = __get_MORN()
-    pos = G.graph['pos']
-    closest_non_component_vertices: Dict[Vertex, Tuple[Vertex, float]] = closest_non_component_vertex_MORN(G)
-    distances: List[float] = list(map(operator.itemgetter(1), closest_non_component_vertices.values()))
-    zeros: int = distances.count(0)
-    print('We have', pluralise(zeros, 'overlapping point'))
-    exit()
-    bins = [0, .1, .25, .5, .75, 1, 10, 100, 1_000, 2_000, 3_000, 5_000]
-    plt.xscale('log')
-    plt.yscale('log')
-    print('Plotting distances...')
-    start: float = time.perf_counter()
-    counts, edges, bars = plt.hist(distances, bins=bins)
-    end: float = time.perf_counter()
-    print(f'Plotted data in {sec2str(end-start)}.')
-    plt.bar_label(bars)
-    plt.show()
 
 def overlapping_groups_MORN(G: nx.Graph=None, save_every: int=200) -> List[Set[Vertex]]:
     if G is None:
@@ -1468,28 +1514,30 @@ def stackoverflow_interesting_components(G: nx.Graph=None):
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> --- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 if __name__ == '__main__':
+    # large_plot_MORN(fname='jamie.png', figure_size=A4, dpi=600)
+    # exit()
     # look_at_cncv_MORN()
     # attempt_to_resolve_MORN_using_cncv()
     # _ = overlapping_groups_MORN()
     G: nx.Graph = __get_MORN()
-    _, F = flatten_MORN_using_cncv(G=G)
-    print('<main> Deleting missing vertices from flattened MORN pos dictionary...')
-    diff: Set[Vertex] = G.nodes() - F.nodes()
-    for missing in diff:
-        del F.graph['pos'][missing]
-    print('<main> Obtaining redundant points for flattened MORN...')
-    redundant_points: List[Vertex] = redundant_points_MORN(G=F)
-    savings_ratio: float = 1 - (F.number_of_nodes() - len(redundant_points)) / F.number_of_nodes()
-    savings_percentage: float = round(savings_ratio * 100, 2)
-    print('<main> Removing redundant points from flattened MORN...')
-    remove_redundant_points(F, redundant_points)
-    print(f'<main> Trimmed, flattened MORN is {savings_percentage}% lighter than flattened MORN.')
-    print('<main> Updating shortest path lengths...')
-    F.graph['shortest_path_lengths'] = dict(nx.all_pairs_shortest_path_length(F))
-    print('<main> Updated shortest path lengths.')
-    print('<main> Finding local cutvertices in trimmed, flattened MORN...')
+    # _, F = flatten_MORN_using_cncv(G=G)
+    # print('<main> Deleting missing vertices from flattened MORN pos dictionary...')
+    # diff: Set[Vertex] = G.nodes() - F.nodes()
+    # for missing in diff:
+    #     del F.graph['pos'][missing]
+    # print('<main> Obtaining redundant points for flattened MORN...')
+    # redundant_points: List[Vertex] = redundant_points_MORN(G=F)
+    # savings_ratio: float = 1 - (F.number_of_nodes() - len(redundant_points)) / F.number_of_nodes()
+    # savings_percentage: float = round(savings_ratio * 100, 2)
+    # print('<main> Removing redundant points from flattened MORN...')
+    # remove_redundant_points(F, redundant_points)
+    # print(f'<main> Trimmed, flattened MORN is {savings_percentage}% lighter than flattened MORN.')
+    # print('<main> Updating shortest path lengths...')
+    # F.graph['shortest_path_lengths'] = dict(nx.all_pairs_shortest_path_length(F))
+    # print('<main> Updated shortest path lengths.')
+    # print('<main> Finding local cutvertices in trimmed, flattened MORN...')
     checkpoint_file: Path = PROJECT_ROOT / 'MORN' / 'trimmed_flattened_MORN_flc.pickle'
-    flc(F, checkpoint_file)
+    flc(G, checkpoint_file)
     exit()
     
 
