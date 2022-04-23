@@ -17,6 +17,7 @@ from .datasets import (
 from .local_separators import (
     Vertex,
     LocalCutvertex,
+    is_local_cutvertex,
     split_at_local_cutvertices,
     ball,
 )
@@ -29,6 +30,7 @@ from .utils import (
     FigureSize, A0, A1, A2, A3, A4,
     visually_distinct_colours,
     euclidean_distance,
+    polygon,
 )
 from .visualise import (
     draw_graph,
@@ -38,6 +40,7 @@ from .visualise import (
 )
 
 from collections import Counter
+from pathlib import Path
 from typing import (
     Any,
     Dict,
@@ -348,12 +351,16 @@ def _interim_report_1_figure():
     plt.title(f'Graph $G$ with $2$-local cutvertex ${local_cutvertex}$ removed')
     plt.show()
 
-def w13_every_other_pair_of_spokes_removed(layout: callable):
-    G: nx.Graph = nx.cycle_graph(range(2, 14))
+def __get_W13_special(hub: int=1) -> nx.Graph:
+    G: nx.Graph = nx.cycle_graph(range(hub+1, hub+13))
     spokes = []
-    for i in range(2, 14, 4):
-        spokes.extend([(1, i), (1, i+1)])
+    for i in range(hub+1, hub+13, 4):
+        spokes.extend([(hub, i), (hub, i+1)])
     G.add_edges_from(spokes)
+    return G
+
+def w13_every_other_pair_of_spokes_removed(layout: callable):
+    G: nx.Graph = __get_W13_special(hub=1)
     pos = layout(G)
     fig, axes = plt.subplots(1, 2)
     ax = axes[0]
@@ -363,6 +370,180 @@ def w13_every_other_pair_of_spokes_removed(layout: callable):
     B = ball(G, 1, 1.5)
     nx.draw_networkx(B, pos, with_labels=True, font_color='w', ax=ax)
     ax.set_title('$B_{3/2}(1)$ in $H$')
+    plt.show()
+
+def definition_splitting_local_cutvertex():
+    # Obtain the graph.
+    hub: int = 1
+    G: nx.Graph = __get_W13_special(hub=hub)
+    # Create the labels (all empty strings except for hub).
+    hub_name: str = 'v'
+    labels: Dict[int, str] = {
+        v: f'${hub_name}$' * (v == hub) for v in G.nodes()
+    }
+    # Construct the figure and axes.
+    fig, axes = plt.subplots(1, 3)
+    # Introduce some figure hyperparameters.
+    NODE_SIZE: int = 250
+    DEFAULT_EDGE_WIDTH: float = 2
+    THICK_EDGE_WIDTH: float = 3
+    FONT_WEIGHT: str = 'bold'
+    FONT_COLOUR: str = 'k'
+    EDGECOLORS: str = 'k'
+    
+    ### Construct the different graphs we'll be plotting.
+    ## G is the graph on the left, plain and simple, already there.
+    ## H is the graph in the middle, apart from some highlighting
+    ## when being drawn, it is identical to G.
+    H: nx.Graph = G
+    ## I is the graph on the right, it'll be G split at hub with radius r.
+    r: int = 3
+    ball_around_hub: nx.Graph = ball(G, hub, r/2)
+    punctured: nx.Graph = nx.subgraph_view(ball_around_hub, filter_node=lambda x: x != hub)
+    punctured_components: List[Set[Vertex]] = list(nx.connected_components(punctured))
+    neighbourhood: Set[Vertex] = set(G.neighbors(hub))
+    edge_partition: Set[Tuple[Vertex, ...]] = set(
+        tuple(neighbourhood.intersection(comp)) for comp in punctured_components
+    )
+    local_cutvertex: LocalCutvertex = LocalCutvertex(
+        vertex=hub, locality=r, edge_partition=edge_partition
+    )
+    I: nx.Graph = split_at_local_cutvertices(G, [local_cutvertex])
+    # Add the split vertices to the labels dictionary.
+    for node, split in I.nodes(data='split'):
+        if split:
+            labels[node] = ''
+    # Obtain the required amount of visually distinct colours.
+    num_colours: int = len(punctured_components) + 2
+    COMPONENT_COLOURS: List[str] = [f'xkcd:{yuh}' for yuh in 'teal,barney purple,salmon'.split(',')]
+    DEFAULT_COLOUR: str = 'xkcd:sky blue'
+    BALL_COLOUR: str = 'xkcd:pinkish red'
+    # Obtain the layout.
+    matching_offset: float = 15.
+    global_offset: float = 210.
+    pos = {i+2: point for i,point in enumerate(polygon(12, 2, rotate_degrees=matching_offset + global_offset))}
+    pos[hub] = (0,0)
+    triangle = list(polygon(3, 1, rotate_degrees=global_offset))
+    triangle[0], triangle[1] = triangle[1], triangle[0]
+    pos.update({
+        node: triangle.pop()
+        for node, split in I.nodes(data='split') if split
+    })
+    ## Proceed to draw.
+    # Draw G, plain and simple, with the hub highlighted.
+    ax = axes[0]
+    ax.set_title(f'Graph $G$ with a ${r}$-local cutvertex ${hub_name}$')
+    ax.set_aspect('equal')
+    nx.draw_networkx(
+        G, pos,
+        node_color=DEFAULT_COLOUR,
+        edge_color=DEFAULT_COLOUR,
+        node_size=NODE_SIZE,
+        edgecolors=EDGECOLORS,
+        width=DEFAULT_EDGE_WIDTH,
+        labels=labels,
+        font_color=FONT_COLOUR,
+        font_weight=FONT_WEIGHT,
+        ax=ax,
+    )
+    # Draw H, which is G with the ball highlighted.
+    ax = axes[1]
+    ax.set_aspect('equal')
+    ax.set_title(rf'$G$ with $B_{{{r}/{2}}}({hub_name})$ highlighted')
+    non_ball_nodes: Set[Vertex] = G.nodes() - ball_around_hub.nodes()
+    non_ball_edges: List[Tuple[Vertex, Vertex]] = [
+        (x,y) for (x,y) in G.edges()
+        if x in non_ball_nodes or y in non_ball_nodes
+    ]
+    nx.draw_networkx(
+        ball_around_hub, pos,
+        node_size=NODE_SIZE,
+        node_color=BALL_COLOUR,
+        width=THICK_EDGE_WIDTH,
+        edgecolors=EDGECOLORS,
+        edge_color=BALL_COLOUR,
+        labels=labels,
+        font_color=FONT_COLOUR,
+        font_weight=FONT_WEIGHT,
+        ax=ax
+    )
+    nx.draw_networkx(
+        G, pos,
+        node_size=NODE_SIZE,
+        nodelist=non_ball_nodes,
+        node_color=DEFAULT_COLOUR,
+        edgecolors=EDGECOLORS,
+        edgelist=non_ball_edges,
+        width=DEFAULT_EDGE_WIDTH,
+        edge_color=DEFAULT_COLOUR,
+        labels=labels,
+        font_color=FONT_COLOUR,
+        font_weight=FONT_WEIGHT,
+        ax=ax
+    )
+    # Draw I, which is G split at v.
+    ax = axes[2]
+    ax.set_aspect('equal')
+    ax.set_title(f'$G$ split at ${hub_name}$, with square split vertices')
+    # Draw the non-ball nodes and edges.
+    nx.draw_networkx(
+        I, pos,
+        nodelist=non_ball_nodes.union({hub}),
+        node_size=NODE_SIZE,
+        node_color=DEFAULT_COLOUR,
+        edgecolors=EDGECOLORS,
+        edgelist=non_ball_edges,
+        width=DEFAULT_EDGE_WIDTH,
+        edge_color=DEFAULT_COLOUR,
+        labels=labels,
+        font_color=FONT_COLOUR,
+        font_weight=FONT_WEIGHT,
+        ax=ax
+    )
+    # Draw each component of the punctured ball in I, and its split vertex.
+    split_vertices: List[Vertex] = [
+        next(
+            vertex for vertex, split in I.nodes(data='split')
+            if split and any(
+                I.has_edge(vertex, c_i) for c_i in component
+            )
+        ) for component in punctured_components
+    ]
+    edgelists: List[List[Tuple[Vertex, Vertex]]] = [
+        list(nx.subgraph_view(I, filter_node=lambda x: x in component).edges())
+        + [(split_vertex, n) for n in I.neighbors(split_vertex) if n != hub]
+        for split_vertex, component in zip(split_vertices, punctured_components)
+    ]
+    for component, split_vertex, edgelist, colour in zip(punctured_components, split_vertices, edgelists, COMPONENT_COLOURS):
+        nx.draw_networkx(
+            I, pos,
+            nodelist=component,
+            node_size=NODE_SIZE,
+            node_color=colour,
+            edgecolors=EDGECOLORS,
+            edgelist=edgelist,
+            width=THICK_EDGE_WIDTH,
+            edge_color=colour,
+            with_labels=False,
+            ax=ax
+        )
+        nx.draw_networkx_nodes(
+            I, pos,
+            nodelist=[split_vertex],
+            node_size=NODE_SIZE,
+            edgecolors=EDGECOLORS,
+            node_shape='s',
+            node_color=colour,
+            ax=ax
+        )
+        nx.draw_networkx_edges(
+            I, pos,
+            edgelist=I.edges(hub),
+            width=DEFAULT_EDGE_WIDTH,
+            edge_color=DEFAULT_COLOUR,
+            ax=ax
+        )
+    # showmepls
     plt.show()
 
 # QUICK PROTOTYPING (lol, find an accurate name)
@@ -476,6 +657,111 @@ def is_this_definitely_working():
         nx.draw_networkx(graph, with_labels=True, ax=ax)
         ax.set_title(f'Graph ${name}$')
     plt.show()
+
+def flc(G: nx.Graph, checkpoint_file: Path, min_locality: int=3, every: int=100) -> List[LocalCutvertex]:
+    '''
+        src.find_local_cutvertices with checkpointing.
+    '''
+    components: List[Set[Vertex]] = list(nx.connected_components(G))
+    if checkpoint_file.exists() and checkpoint_file.stat().st_size > 0:
+        # Checkpoint file exists.
+        with open(checkpoint_file, 'rb') as handle:
+            data = pickle.load(handle)
+            try:
+                checkpoint: int
+                local_cutvertices: List[LocalCutvertex]
+                checkpoint, local_cutvertices = data
+                print(f'<FLC> [{checkpoint}/{len(G.nodes())}] Checkpoint found!')
+            except ValueError:
+                print('<FLC> Routine previously ran to completion, returning result...')
+                return data
+    else:
+        # Checkpoint file does not exist.
+        checkpoint: int = 0
+        local_cutvertices: List[LocalCutvertex] = []
+    # Apply checkpoint.
+    nodes: List[Vertex] = list(G.nodes())
+    nodes = nodes[checkpoint:]
+    start: float = time.perf_counter()
+    for i, v in enumerate(nodes):
+        # Save me progress matey.
+        if i and not i % every:
+            now: float = time.perf_counter()
+            print(f'<FLC> [{checkpoint+i}/{len(nodes)+checkpoint}] Processed {pluralise(every, "vertex")} in {sec2str(now-start)}, found {pluralise(len(local_cutvertices), "local cutvertex")} so far...' + ' '*20 + '\r', end='')
+            with open(checkpoint_file, 'wb') as handle:
+                pickle.dump((checkpoint+i, local_cutvertices), handle)
+            start = now
+        # dors wesh gros t'es mort
+        mi: int = min_locality
+        component: Set[Vertex] = next(comp for comp in components if v in comp)
+        ma: int = len(component)
+        if mi > ma:
+            continue
+        mid: int = None
+        v_is_a_local_cutvertex: bool = None
+        while True:
+            if ma - mi == 1 and v_is_a_local_cutvertex is not None:
+                if not v_is_a_local_cutvertex:
+                    v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, mi)
+                    mid: int = mi
+                    break
+                else:
+                    v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, ma)
+                    if v_is_a_local_cutvertex:
+                        mid: int = ma
+                    else:
+                        v_is_a_local_cutvertex: bool = True
+                    break
+            else:
+                mid: int = mi + math.floor((ma - mi) / 2)
+            # try:
+            v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, mid)
+            # except nx.exception.NetworkXPointlessConcept:
+            #     print('Problematic:', v)
+            #     print('Neighbours:', list(G.neighbors(v)))
+            #     print('Radius:', mid)
+            #     print('Component size:', len(component))
+            #     fig, axes = plt.subplots(1, 3)
+            #     axes = axes.reshape(-1)
+            #     component_yeah: nx.Graph = nx.subgraph_view(G, filter_node=lambda node: node in component)
+            #     deez_nuts: nx.Graph = ball(G, v, mid/2)
+            #     punctured_ball: nx.Graph = nx.subgraph_view(deez_nuts, filter_node=lambda node: node != v)
+            #     pos = G.graph['pos']
+            #     labels = {vertex: str(vertex)*(vertex == 'v') for vertex in component}
+            #     nx.draw_networkx_nodes(component_yeah, pos, node_size=100, nodelist=[v], node_color='red', ax=axes[0], label=labels)
+            #     nx.draw_networkx_nodes(component_yeah, pos, node_size=50, nodelist=component - {v}, ax=axes[0], label=labels)
+            #     nx.draw_networkx_edges(component_yeah, pos, edgelist=component_yeah.edges(), ax=axes[0])
+            #     nx.draw_networkx(deez_nuts, pos, with_labels=False, node_size=50, ax=axes[1], labels=labels)
+            #     nx.draw_networkx(punctured_ball, pos, with_labels=False, node_size=50, ax=axes[2])
+            #     plt.show()
+            #     raise
+            if mi == ma:
+                break
+            if v_is_a_local_cutvertex:
+                mi: int = mid
+            else:
+                ma: int = mid
+        if v_is_a_local_cutvertex:
+            component_without_v: nx.Graph = nx.classes.graphviews.subgraph_view(
+                G, filter_node=lambda x: x in component and x != v
+            )
+            if nx.algorithms.components.is_connected(component_without_v):
+                punctured_ball: nx.Graph = nx.classes.graphviews.subgraph_view(
+                    ball(G, v, mid/2), filter_node=lambda x: x != v
+                )
+                punctured_ball_components: Generator[Set[Vertex], None, None] = nx.connected_components(punctured_ball)
+                neighbourhood: Set[Vertex] = set(G.neighbors(v))
+                edge_partition: Set[Tuple[Vertex, ...]] = set(
+                    tuple(neighbourhood.intersection(comp)) for comp in punctured_ball_components
+                )
+                local_cutvertices.append(
+                    LocalCutvertex(vertex=v, locality=mid, edge_partition=edge_partition)
+                )
+    print('\n<FLC> Done finding local cutvertices, saving result...')
+    with open(checkpoint_file, 'wb') as handle:
+        pickle.dump(local_cutvertices, handle)
+    print(f'<FLC> Result saved ({humanize.naturalsize(checkpoint_file.stat().st_size)}).')
+    return local_cutvertices
 
 # STATS SHIT
 
@@ -645,6 +931,18 @@ def redundant_points_MORN(G: nx.Graph=None) -> List[Vertex]:
             redundant.append(vertex)
     return redundant
 
+def remove_redundant_points(G: nx.Graph, redundant_points: List[Vertex]):
+    '''
+        OPERATES IN-PLACE.
+    '''
+    # Create edges around redundant points.
+    # NOTE: a redundant point v has 2 neighbours, hence tuple(H.neighbors(v)) links its neighbours.
+    G.add_edges_from([
+        tuple(G.neighbors(vertex)) for vertex in redundant_points
+    ])
+    # Delete redundant points.
+    G.remove_nodes_from(redundant_points)
+
 def analyse_MORN(how_many: int):
     '''
         This functions runs some stats on the Major_Road_Network_2018_Open_Roads dataset,
@@ -709,10 +1007,7 @@ def compare_MORN_redundant_points():
     savings_percentage: float = round(savings_ratio * 100, 2)
     # Remove redundant points from G.
     H: nx.Graph = G.copy()
-    H.add_edges_from(
-        [tuple(H.neighbors(vertex)) for vertex in redundant]
-    )
-    H.remove_nodes_from(redundant)
+    remove_redundant_points(H, redundant)
     # Obtain matplotlib plot.
     fig, axes = plt.subplots(1, 2)
     fig.set_size_inches(A4[0]*2, A4[1])
@@ -734,7 +1029,8 @@ def large_plot_MORN(G: nx.Graph=None, node_color: str='red', fname: str='large_p
     fig.set_size_inches(*figure_size)
     fig.set_dpi(dpi)
     nx.draw(G, G.graph['pos'], node_size=0., node_color=node_color, edge_color='gray', ax=ax)
-    plt.savefig(fname, dpi=dpi)
+    plt.show()
+    # plt.savefig(fname, dpi=dpi)
 
 def random_plot_MORN_components(how_many: int, G: nx.Graph=None):
     if G is None:
@@ -1086,7 +1382,66 @@ def overlapping_groups_MORN(G: nx.Graph=None, save_every: int=200) -> List[Set[V
     print('<OG> Returning result...')
     return groups
 
-def attempt_to_resolve_MORN_using_cncv(G: nx.Graph=None):
+def flatten_MORN_using_cncv(G: nx.Graph=None, every: int=100) -> Tuple[List[int], nx.Graph]:
+    # Obtain MORN.
+    if G is None:
+        G: nx.Graph = __get_MORN()
+    pos = G.graph['pos']
+    # Obtain overlapping groups of vertices.
+    groups: List[Set[Vertex]] = overlapping_groups_MORN(G=G)
+    # Check for checkpoint.
+    filename: Path = PROJECT_ROOT / 'MORN' / 'flattened_MORN.pickle'
+    if not (filename.exists() and filename.stat().st_size > 0):
+        # Checkpoint doesn't exist.
+        checkpoint: int = 0
+        component_count_accumulator: List[int] = [nx.number_connected_components(G)]
+    else:
+        # Checkpoint exists.
+        checkpoint: int
+        component_count_accumulator: List[int]
+        with open(filename, 'rb') as handle:
+            data = pickle.load(handle)
+        try:
+            checkpoint, component_count_accumulator, G = data
+            print(f'<FMORN> [{checkpoint}/{len(groups)}] Checkpoint found!')
+        except ValueError:
+            # Assume routine previously completed successfully.
+            print('<FMORN> Routine previously completed successfully, returning result.')
+            component_count_accumulator, G = data
+            return component_count_accumulator, G
+    # Define flattening function.
+    def flatten_group(group: Set[Vertex]):
+        if not group or len(group) == 1:
+            raise ValueError('B R U H')
+        group_iter = iter(group)
+        vertex: Vertex = next(group_iter)
+        to_delete: List[Vertex] = list(group_iter)
+        neighbourhood: Set[Vertex] = set()
+        neighbourhood.update(*(set(G.neighbors(v)) for v in to_delete))
+        G.add_edges_from((vertex, neighbour) for neighbour in neighbourhood)
+        G.remove_nodes_from(to_delete)
+        for node in to_delete:
+            del G.graph['pos'][node]
+    # Flatten groups, keeping track of number of connected components.
+    print(f'Flattening {pluralise(len(groups), "group")}...')
+    start: float = time.perf_counter()
+    for i, group in enumerate(groups[checkpoint:]):
+        debug: bool = i and not i % every
+        if debug:
+            now: float = time.perf_counter()
+            print(f'[{i}/{len(groups)}] Flattened {pluralise(every, "group")} in {sec2str(now-start)}...' + ' '*30 + '\r', end='')
+            with open(filename, 'wb') as handle:
+                pickle.dump((i, component_count_accumulator, G), handle)
+            start = now
+        flatten_group(group)
+        component_count_accumulator.append(nx.number_connected_components(G))
+    print('\nAll overlapping groups of vertices flattened.')
+    with open(filename, 'wb') as handle:
+        pickle.dump((component_count_accumulator, G), handle)
+    print(f'<FMORN> Result saved ({humanize.naturalsize(filename.stat().st_size)}).')
+    return component_count_accumulator, G
+
+def attempt_to_resolve_MORN_using_cncv(G: nx.Graph=None, print_every: int=100) -> nx.Graph:
     '''
         MORN resolution strategy:
             1) Find the groups of overlapping vertices.
@@ -1095,16 +1450,20 @@ def attempt_to_resolve_MORN_using_cncv(G: nx.Graph=None):
             4) Repeat 1-3 until all groups addressed.
             5) Count number of components.
     '''
+    # Obtain G.
     if G is None:
         G: nx.Graph = __get_MORN()
     pos = G.graph['pos']
-    groups: List[Set[Vertex]] = overlapping_groups_MORN(G=G)
-    starting_component_count: int = nx.number_connected_components(G)
-    
-    sizes: List[int] = list(map(len, groups))
-    counts, edges, bars = plt.hist(sizes)
-    plt.bar_label(bars)
+    # Obtain flattened MORN.
+    component_count_accumulator: List[int]
+    component_count_accumulator, G = flatten_MORN_using_cncv(G)
+    # Plot data.
+    plt.plot(range(len(component_count_accumulator)), component_count_accumulator)
+    # Show data.
     plt.show()
+    # counts, edges, bars = plt.hist(sizes)
+    # plt.bar_label(bars)
+    # plt.show()
     
 def stackoverflow_interesting_components(G: nx.Graph=None):
     if G is None:
@@ -1126,7 +1485,50 @@ def stackoverflow_interesting_components(G: nx.Graph=None):
 if __name__ == '__main__':
     # look_at_cncv_MORN()
     # attempt_to_resolve_MORN_using_cncv()
-    _ = overlapping_groups_MORN()
+    # _ = overlapping_groups_MORN()
+    G: nx.Graph = __get_MORN()
+    _, F = flatten_MORN_using_cncv(G=G)
+    print('<main> Deleting missing vertices from flattened MORN pos dictionary...')
+    diff: Set[Vertex] = G.nodes() - F.nodes()
+    for missing in diff:
+        del F.graph['pos'][missing]
+    print('<main> Obtaining redundant points for flattened MORN...')
+    redundant_points: List[Vertex] = redundant_points_MORN(G=F)
+    savings_ratio: float = 1 - (F.number_of_nodes() - len(redundant_points)) / F.number_of_nodes()
+    savings_percentage: float = round(savings_ratio * 100, 2)
+    print('<main> Removing redundant points from flattened MORN...')
+    remove_redundant_points(F, redundant_points)
+    print(f'<main> Trimmed, flattened MORN is {savings_percentage}% lighter than flattened MORN.')
+    print('<main> Updating shortest path lengths...')
+    F.graph['shortest_path_lengths'] = dict(nx.all_pairs_shortest_path_length(F))
+    print('<main> Updated shortest path lengths.')
+    print('<main> Finding local cutvertices in trimmed, flattened MORN...')
+    checkpoint_file: Path = PROJECT_ROOT / 'MORN' / 'trimmed_flattened_MORN_flc.pickle'
+    flc(F, checkpoint_file)
+    exit()
+    
+
+    component_count, G = flatten_MORN_using_cncv()
+    plt.plot(range(len(component_count)), component_count, linestyle='--')
+    plt.show()
+    exit()
+    pos = G.graph['pos']
+    components: List[Set[Vertex]] = list(nx.connected_components(G))
+    print(f'We have {pluralise(len(components), "connected component")} in the flattened version of MORN.')
+    
+    highlight: str = 'xkcd:salmon'
+    no_highlight: str = 'gray'
+
+    try:
+        for component in components:
+            fig, ax = plt.subplots()
+            nx.draw_networkx(G, pos, nodelist=component, node_color=highlight, ax=ax)
+            nx.draw_networkx(G, pos, nodelist=G.nodes()-component, node_color=no_highlight, ax=ax)
+            plt.show()
+    except KeyboardInterrupt:
+        print('Stopping...')
+    
+    # definition_splitting_local_cutvertex()
 
 
     # leaves_inter_node_distance_MORN(G=G)
