@@ -3,7 +3,7 @@ from src.local_separators import (
     Vertex,
     LocalCutvertex,
 )
-from tests.utils import polygon
+from src.utils import polygon
 
 from itertools import combinations
 from math import sqrt
