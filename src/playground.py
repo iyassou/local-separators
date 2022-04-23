@@ -74,6 +74,17 @@ def __get_Network_Data_MJS20_graphs() -> List[nx.Graph]:
     graphs: List[nx.Graph] = [graph for dataset in datasets for graph in dataset]
     return graphs
 
+def __get_W13_special(hub: int=1) -> nx.Graph:
+    G: nx.Graph = nx.cycle_graph(range(hub+1, hub+13))
+    spokes = []
+    for i in range(hub+1, hub+13, 4):
+        spokes.extend([(hub, i), (hub, i+1)])
+    G.add_edges_from(spokes)
+    return G
+
+def __get_MORN() -> nx.Graph:
+    return MajorOpenRoadNetworks['Major_Road_Network_2018_Open_Roads']
+
 # TESTING THE DRAWING FUNCTIONS IN visualise.py
 
 def try_draw_graph():
@@ -350,14 +361,6 @@ def _interim_report_1_figure():
     plt.legend(scatterpoints=1, loc=legend_loc)
     plt.title(f'Graph $G$ with $2$-local cutvertex ${local_cutvertex}$ removed')
     plt.show()
-
-def __get_W13_special(hub: int=1) -> nx.Graph:
-    G: nx.Graph = nx.cycle_graph(range(hub+1, hub+13))
-    spokes = []
-    for i in range(hub+1, hub+13, 4):
-        spokes.extend([(hub, i), (hub, i+1)])
-    G.add_edges_from(spokes)
-    return G
 
 def w13_every_other_pair_of_spokes_removed(layout: callable):
     G: nx.Graph = __get_W13_special(hub=1)
@@ -683,6 +686,7 @@ def flc(G: nx.Graph, checkpoint_file: Path, min_locality: int=3, every: int=100)
     nodes: List[Vertex] = list(G.nodes())
     nodes = nodes[checkpoint:]
     start: float = time.perf_counter()
+    # leggo
     for i, v in enumerate(nodes):
         # Save me progress matey.
         if i and not i % every:
@@ -714,27 +718,7 @@ def flc(G: nx.Graph, checkpoint_file: Path, min_locality: int=3, every: int=100)
                     break
             else:
                 mid: int = mi + math.floor((ma - mi) / 2)
-            # try:
             v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, mid)
-            # except nx.exception.NetworkXPointlessConcept:
-            #     print('Problematic:', v)
-            #     print('Neighbours:', list(G.neighbors(v)))
-            #     print('Radius:', mid)
-            #     print('Component size:', len(component))
-            #     fig, axes = plt.subplots(1, 3)
-            #     axes = axes.reshape(-1)
-            #     component_yeah: nx.Graph = nx.subgraph_view(G, filter_node=lambda node: node in component)
-            #     deez_nuts: nx.Graph = ball(G, v, mid/2)
-            #     punctured_ball: nx.Graph = nx.subgraph_view(deez_nuts, filter_node=lambda node: node != v)
-            #     pos = G.graph['pos']
-            #     labels = {vertex: str(vertex)*(vertex == 'v') for vertex in component}
-            #     nx.draw_networkx_nodes(component_yeah, pos, node_size=100, nodelist=[v], node_color='red', ax=axes[0], label=labels)
-            #     nx.draw_networkx_nodes(component_yeah, pos, node_size=50, nodelist=component - {v}, ax=axes[0], label=labels)
-            #     nx.draw_networkx_edges(component_yeah, pos, edgelist=component_yeah.edges(), ax=axes[0])
-            #     nx.draw_networkx(deez_nuts, pos, with_labels=False, node_size=50, ax=axes[1], labels=labels)
-            #     nx.draw_networkx(punctured_ball, pos, with_labels=False, node_size=50, ax=axes[2])
-            #     plt.show()
-            #     raise
             if mi == ma:
                 break
             if v_is_a_local_cutvertex:
@@ -898,9 +882,6 @@ def number_of_components_post_splitting_NDMJS20():
     # Show us the money.
     plt.tight_layout()
     plt.show()
-
-def __get_MORN() -> nx.Graph:
-    return MajorOpenRoadNetworks['Major_Road_Network_2018_Open_Roads']
 
 def redundant_points_MORN(G: nx.Graph=None) -> List[Vertex]:
     '''
