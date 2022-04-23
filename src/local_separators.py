@@ -185,8 +185,8 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
     for v in G.nodes:
         # Prepare the binary search bounds.
         mi: int = min_locality
-        component: Set[Vertex] = next(comp for comp in components if v in comp)
-        ma: int = len(component)
+        component_vertices: Set[Vertex] = next(comp for comp in components if v in comp)
+        ma: int = len(component_vertices)
         if mi > ma:
             # This can occur if there are fewer vertices in the
             # component v belongs to than expected. In this case,
@@ -194,6 +194,18 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
             # not of interest, given that it would be smaller than
             # min_radius, hence we should move onto the next vertex.
             continue
+        # Check if v is a component-level separator. If it is we discard it as we're
+        # only interested in genuine local cutvertices.
+        component_without_v: nx.Graph = nx.classes.graphviews.subgraph_view(
+            G, filter_node=lambda node: node in component_vertices and node != v
+        )
+        if not nx.algorithms.components.is_connected(component_without_v):
+            continue
+        # v is a potential genuine local cutvertex, obtain the subgraph induced on
+        # its component and proceed onto the binary search for its locality.
+        component: nx.Graph = nx.classes.graphviews.subgraph_view(
+            G, filter_node=lambda node: node in component_vertices
+        )
         mid: int = None
         v_is_a_local_cutvertex: bool = None
         # Proceed with the binary search.
@@ -210,7 +222,7 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
                     # PLAN OF ACTION:   Determine if v is a mi-local cutvertex.
                     #                   Update mid = mi, regardless of whether v is
                     #                   a mid-local cutvertex.
-                    v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, mi)
+                    v_is_a_local_cutvertex: bool = is_local_cutvertex(component, v, mi)
                     mid: int = mi
                     break
                 else:
@@ -222,7 +234,7 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
                     #
                     #                   If v is not a ma-local cutvertex, then let mid stay
                     #                   as mi, and revert v_is_a_local_cutvertex to True.
-                    v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, ma)
+                    v_is_a_local_cutvertex: bool = is_local_cutvertex(component, v, ma)
                     if v_is_a_local_cutvertex:
                         mid: int = ma
                     else:
@@ -232,7 +244,7 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
                 # Since is_local_cutvertex only accepts integers we're taking the floor.
                 mid: int = mi + floor((ma - mi) / 2)
             ### Check if v is mid-local cutvertex.
-            v_is_a_local_cutvertex: bool = is_local_cutvertex(G, v, mid)
+            v_is_a_local_cutvertex: bool = is_local_cutvertex(component, v, mid)
             ### Check if the search bounds have crossed.
             if mi == ma:
                 break
@@ -246,36 +258,28 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
                 # smaller radius for which v is an r-local cutvertex by
                 # increasing the upper bound.
                 ma: int = mid
-        # End of the binary search. Is v a genuine mid-local cutvertex (i.e.
-        # v is a mid-local separator that doesn't separate its component)?
+        # End of the binary search. Is v a genuine mid-local cutvertex?
         if v_is_a_local_cutvertex:
-            component_without_v: nx.Graph = nx.classes.graphviews.subgraph_view(
-                G, filter_node=lambda x: x in component and x != v
+            # Before appending v to the list of local cutvertices we need to obtain the
+            # components of B_{r/2}(v)-v and track the edges they send to v in G.
+
+            # Step 1: Obtain the punctured ball of radius r/2 around v.
+            punctured_ball: nx.Graph = nx.classes.graphviews.subgraph_view(
+                ball(G, v, mid/2), filter_node=lambda x: x != v
             )
-            # Run the component connectedness check.
-            if nx.algorithms.components.is_connected(component_without_v):
-                # v does not separate its component, hence it's a genuine local separator.
-
-                # Before appending v to the list of local cutvertices we need to obtain the
-                # components of B_{r/2}(v)-v and track the edges they send to v in G.
-
-                # Step 1: Obtain the punctured ball of radius r/2 around v.
-                punctured_ball: nx.Graph = nx.classes.graphviews.subgraph_view(
-                    ball(G, v, mid/2), filter_node=lambda x: x != v
-                )
-                # Step 2: Obtain the connected components of the punctured ball.
-                punctured_ball_components: Generator[Set[Vertex], None, None] = nx.connected_components(punctured_ball)
-                # Step 3: Obtain the neighbourhood of v in G.
-                neighbourhood: Set[Vertex] = set(G.neighbors(v))
-                # Step 4: Obtain the intersections of the neighbourhood of v in G with
-                #         the components of the punctured ball.
-                edge_partition: Set[Tuple[Vertex, ...]] = set(
-                    tuple(neighbourhood.intersection(comp)) for comp in punctured_ball_components
-                )
-                # Add LocalCutvertex v to the list of local cutvertices.
-                local_cutvertices.append(
-                    LocalCutvertex(vertex=v, locality=mid, edge_partition=edge_partition)
-                )
+            # Step 2: Obtain the connected components of the punctured ball.
+            punctured_ball_components: Generator[Set[Vertex], None, None] = nx.connected_components(punctured_ball)
+            # Step 3: Obtain the neighbourhood of v in G.
+            neighbourhood: Set[Vertex] = set(G.neighbors(v))
+            # Step 4: Obtain the intersections of the neighbourhood of v in G with
+            #         the components of the punctured ball.
+            edge_partition: Set[Tuple[Vertex, ...]] = set(
+                tuple(neighbourhood.intersection(comp)) for comp in punctured_ball_components
+            )
+            # Add LocalCutvertex v to the list of local cutvertices.
+            local_cutvertices.append(
+                LocalCutvertex(vertex=v, locality=mid, edge_partition=edge_partition)
+            )
     # Done iterating over the vertices.
     return local_cutvertices
 
