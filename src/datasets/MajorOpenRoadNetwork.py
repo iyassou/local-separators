@@ -22,7 +22,7 @@ import shapefile
 import sys
 
 SAVE_PROGRESS_EVERY: int = 100
-DATASET_FOLDER: Path = DATASETS_ROOT / 'MajorOpenRoadNetworks'
+DATASET_FOLDER: Path = DATASETS_ROOT / 'MajorOpenRoadNetwork'
 OVERLAPPING_GROUPS_FILENAME: Path = DATASET_FOLDER / 'OverlappingGroups.pickle'
 FLATTEN_GROUPS_FILENAME: Path = DATASET_FOLDER / 'FlattenGroups.pickle'
 POST_PROCESSED_GRAPH_FILENAME: Path = DATASET_FOLDER / 'PostProcessedGraph.pickle'
@@ -63,29 +63,35 @@ def __get_overlapping_groups(G: nx.Graph) -> List[Set[Vertex]]:
     print(f'<MORN> Obtaining overlapping groups of vertices{f" (using checkpoint {checkpoint}/{G.number_of_nodes()})" * bool(checkpoint)}...')
     # Obtain ordered list of nodes.
     nodes: List[Vertex] = list(G.nodes())
+    # Create a set of processed nodes and all nodes.
+    processed_nodes: Set[Vertex] = {v for v in nodes if any(v in group for group in groups)}
+    all_nodes: Set[Vertex] = set(G.nodes())
     # Proceed to finding overlapping groups.
     for i, node in enumerate(nodes[checkpoint:]):
         # Save progress.
         if i and not i % SAVE_PROGRESS_EVERY:
             with open(OVERLAPPING_GROUPS_FILENAME, 'wb') as handle:
                 pickle.dump((i, groups), handle)
-        # Begin by checking if a group has already been created for either the group
-        # coordinator or its closest vertex.
-        try:
-            group: Set[Vertex] = next(group for group in groups if node in group)
-            # Group found, carry on.
+        # Begin by checking if the vertex has already been processed.
+        if node in processed_nodes:
             continue
-        except StopIteration:
-            # A group entry hasn't been made for this node, proceed with the routine.
-            pass
-        # Create starting group.
+        # Create a group for the vertex.
         group: Set[Vertex] = {node}
-        # Go through vertices hoping to expand the group.
-        for other_node in nodes:
+        # Go through vertices that haven't been processed hoping to expand the group.
+        unprocessed_nodes: Set[Vertex] = all_nodes.difference(processed_nodes)
+        for other_node in unprocessed_nodes:
             if pos[node] == pos[other_node]:
+                # New group member found!
                 group.add(other_node)
-        # Add group to list of groups.
-        groups.append(group)
+                # Also add new member to processed nodes.
+                processed_nodes.add(other_node)
+        # If any other overlapping vertices have been found, then add the vertex
+        # to the processed vertices and include the group.
+        if len(group) > 1:
+            # Add vertex to the set of processed nodes.
+            processed_nodes.add(node)
+            # Add group to list of groups.
+            groups.append(group)
     # Routine complete, save total progres without checkpoint.
     with open(OVERLAPPING_GROUPS_FILENAME, 'wb') as handle:
         pickle.dump(groups, handle)
@@ -139,7 +145,7 @@ def __flatten_overlapping_groups(G: nx.Graph, groups: List[Set[Vertex]]) -> Tupl
             return component_count_accumulator, G
     
     def __flatten_group(group: Set[Vertex]):
-        assert len(group) > 1
+        assert len(group) > 1, str(group)
         group_iter: Iterator[Vertex] = iter(group)
         vertex: Vertex = next(group_iter)
         to_delete: List[Vertex] = list(group_iter)
@@ -190,15 +196,24 @@ def __get_redundant_vertices(G: nx.Graph) -> List[Vertex]:
         -------
         List[Vertex]
     '''
-    print('<MORN> Identifying redundant vertices...')
-    redundant: List[Vertex] = []
+    # Obtain dictionary of latitude/longitude pairs.
     pos = G.graph['pos']
-    for vertex, X in pos.items():
-        if G.degree(vertex) != 2:
-            continue
+    # Obtain vertices to check.
+    items: List[Tuple[Vertex, Tuple[float, float]]] = [
+        (vertex, X) for vertex, X in pos.items()
+        if G.degree(vertex) == 2
+    ]
+    print(f'<MORN> Identifying redundant vertices...')
+    redundant: List[Vertex] = []
+    # Process vertices.
+    for vertex, X in items:
+        # Obtain latitude/longitude pairs of neighbours.
         Y, Z = [pos[x] for x in G.neighbors(vertex)]
+        # Check for collinearity/redundancy.
         if collinear(X, Y, Z):
             redundant.append(vertex)
+    
+    # Return result.
     return redundant
 
 def __remove_redundant_vertices(G: nx.Graph, redundant: List[Vertex]):
@@ -216,6 +231,7 @@ def __remove_redundant_vertices(G: nx.Graph, redundant: List[Vertex]):
         -----
         This operation is performed in-place.
     '''
+    print('<MORN> Removing redundant vertices...')
     ## NOTE: recall a redundant vertex v has 2 neighbours, hence
     ##       tuple(G.neighbors(v)) creates an edge between its neighbours.
     # Create edges around the redundant vertices.
@@ -226,7 +242,7 @@ def __remove_redundant_vertices(G: nx.Graph, redundant: List[Vertex]):
     for node in redundant:
         del G.graph['pos'][node]
     
-def parse_MajorOpenRoadNetworks_dataset(file: Path) -> nx.Graph:
+def parse_MajorOpenRoadNetwork_dataset(file: Path) -> nx.Graph:
     '''
         Parses the Major_Road_Network_2018_Open_Roads.zip dataset.
     '''
@@ -264,11 +280,13 @@ def parse_MajorOpenRoadNetworks_dataset(file: Path) -> nx.Graph:
     
     ## Obtain overlapping groups.
     groups: List[Set[Vertex]] = __get_overlapping_groups(G)
+    G.graph['overlapping_groups'] = groups
     ## Flatten overlapping groups.
     component_count_accumulator, G = __flatten_overlapping_groups(G, groups)
     G.graph['component_count_accumulator'] = component_count_accumulator
     ## Obtain redundant vertices.
     redundant: List[Vertex] = __get_redundant_vertices(G)
+    G.graph['num_redundant_vertices'] = len(redundant)
     num_nodes: int = G.number_of_nodes()
     savings_ratio: float = 1 - (num_nodes - len(redundant)) / num_nodes
     G.graph['savings_ratio'] = savings_ratio
@@ -279,13 +297,14 @@ def parse_MajorOpenRoadNetworks_dataset(file: Path) -> nx.Graph:
     with open(POST_PROCESSED_GRAPH_FILENAME, 'wb') as handle:
         pickle.dump(G, handle)
     
+    print('<MORN> Post-processing complete.')
     # Return the graph.
     return G
 
 _DATASET_EXTENSIONS: Set[str] = {'.zip'}
 _PROBLEMATIC_DATASETS: Tuple[str] = ()
-MajorOpenRoadNetworks: DatasetInterface = DatasetInterface(
-    __file__, _DATASET_EXTENSIONS, _PROBLEMATIC_DATASETS, parse_MajorOpenRoadNetworks_dataset
+MajorOpenRoadNetwork: DatasetInterface = DatasetInterface(
+    __file__, _DATASET_EXTENSIONS, _PROBLEMATIC_DATASETS, parse_MajorOpenRoadNetwork_dataset
 )
 
-sys.modules[__name__] = MajorOpenRoadNetworks
+sys.modules[__name__] = MajorOpenRoadNetwork
