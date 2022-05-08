@@ -230,17 +230,20 @@ def __remove_redundant_vertices(G: nx.Graph, redundant: List[Vertex]):
         Notes
         -----
         This operation is performed in-place.
+        You cannot batch process all the redundant vertices in one go because
+        of the issues that arise when redundant vertices are adjacent, hence
+        the individual treatment of redundant vertices.
     '''
     print('<MORN> Removing redundant vertices...')
     ## NOTE: recall a redundant vertex v has 2 neighbours, hence
     ##       tuple(G.neighbors(v)) creates an edge between its neighbours.
-    # Create edges around the redundant vertices.
-    G.add_edges_from([tuple(G.neighbors(v)) for v in redundant])
-    # Delete redundant vertices.
-    G.remove_nodes_from(redundant)
-    # Remove redundant vertices from the dictionary of latitude/longitude pairs.
-    for node in redundant:
-        del G.graph['pos'][node]
+    for v in redundant:
+        # Create edge around the redundant vertex.
+        G.add_edge(*tuple(G.neighbors(v)))
+        # Remove the redundant vertex.
+        G.remove_node(v)
+        # Remove the redundant vertex from the dictionary of latitude/longitude pairs.
+        del G.graph['pos'][v]
     
 def parse_MajorOpenRoadNetwork_dataset(file: Path) -> nx.Graph:
     '''
@@ -263,7 +266,6 @@ def parse_MajorOpenRoadNetwork_dataset(file: Path) -> nx.Graph:
         # print('Reading in points...')
         for shprec in shp.shapeRecords():
             offset: int = len(shprec.shape.points)
-            G.add_nodes_from(range(index, index + offset))
             G.graph['pos'].update({
                 index + i: point
                 for i, point in enumerate(shprec.shape.points)
