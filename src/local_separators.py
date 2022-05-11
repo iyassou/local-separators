@@ -78,8 +78,8 @@ def ball(G: nx.Graph, v: Vertex, r: Union[int, float]) -> nx.Graph:
         nx.Graph
     '''
     # Begin by making sure that the radius conforms to our expectations.
-    decimal, integral = modf(r)
-    if decimal and decimal != 0.5:
+    fractional, _ = modf(r)
+    if fractional and fractional != 0.5:
         raise ValueError(f'expected integer or half-integer radius, got: "{r}"')
     # Compute the lengths of the shortest paths from the v to all other vertices
     # in the graph G that are at most r away from v.
@@ -258,7 +258,7 @@ def find_local_cutvertices(G: nx.Graph, min_locality: int=3) -> List[LocalCutver
                 # smaller radius for which v is an r-local cutvertex by
                 # increasing the upper bound.
                 ma: int = mid
-        # End of the binary search. Is v a genuine mid-local cutvertex?
+        # End of the binary search.
         if v_is_a_local_cutvertex:
             # Before appending v to the list of local cutvertices we need to obtain the
             # components of B_{r/2}(v)-v and track the edges they send to v in G.
