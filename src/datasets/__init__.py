@@ -23,10 +23,6 @@ import pickle
 
 PROJECT_ROOT: Path          = Path(__file__).parent.parent.parent
 DATASETS_ROOT: Path         = PROJECT_ROOT / 'datasets'
-SHORTEST_PATHS_ROOT: Path   = PROJECT_ROOT / 'shortest_path_lengths'
-
-def _shortest_path_lengths_name(path: Path) -> Path:
-    return _doppelganger(SHORTEST_PATHS_ROOT, path, '.shortest_path_lengths')
 
 GETITEM_RETURN_TYPE: type = Dict[str, Union['GETITEM_RETURN_TYPE', List[nx.Graph]]]
 
@@ -262,20 +258,7 @@ class DatasetInterface:
                     continue
                 if knick_knack.stem == attr:
                     # Found the dataset.
-                    G: nx.Graph = self.dataset_parser(knick_knack)
-                    # Associate the shortest_path_lengths data.
-                    graph_shortest_path_lengths: Path = _shortest_path_lengths_name(G.name)
-                    if graph_shortest_path_lengths.exists() and graph_shortest_path_lengths.stat().st_size:
-                        with open(graph_shortest_path_lengths, 'rb') as handle:
-                            G.graph['shortest_path_lengths'] = pickle.load(handle)
-                    else:
-                        graph_shortest_path_lengths.parent.mkdir(parents=True, exist_ok=True)
-                        # nx.algorithms.shortest_path_lengths.unweighted.all_pairs_shortest_path
-                        shortest_path_lengths: dict = dict(nx.all_pairs_shortest_path_length(G))
-                        with open(graph_shortest_path_lengths, 'wb') as handle:
-                            pickle.dump(shortest_path_lengths, handle, protocol=pickle.HIGHEST_PROTOCOL)
-                        G.graph['shortest_path_lengths'] = shortest_path_lengths
-                    return G
+                    return self.dataset_parser(knick_knack)
         # attr is neither a dataset nor a folder, sound the alarm
         raise AttributeError(f'No dataset or folder named "{attr}"')
 
