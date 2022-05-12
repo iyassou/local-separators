@@ -66,7 +66,9 @@ def _edge_from_line(line: str) -> Optional[Tuple[int, int]]:
         -----
         The edges in most edgelists are in the format 'A B' which corresponds to a
         directed edge from B to A. I'm interpreting it as an edge from A to B.
-        If the line is an empty line, then the function returns None.
+        For edges in the format 'A B C' we're assuming C is the weight of the edge,
+        and ignoring it.
+        If the line is an empty line or a comment, then the function returns None.
         
         Returns
         -------
@@ -76,7 +78,11 @@ def _edge_from_line(line: str) -> Optional[Tuple[int, int]]:
         return None
     if line.startswith('#') or line.startswith('%'): # Comment
         return None
-    return tuple(map(int, line.split()))
+    edge: Tuple[int, ...] = tuple(map(int, line.split()))
+    if len(edge) > 2:
+        x, y = edge[0], edge[1]
+        edge = (x, y)
+    return edge
 
 def _edgelist_file_to_networkx_graph(file: Path) -> nx.Graph:
     '''
@@ -127,9 +133,8 @@ class DatasetInterface:
             dataset_extensions: Set[str]
                 Set of extensions that correspond to an individual dataset.
             problematic: Tuple[str]
-                Tuple of datasets which are problematic to parse and so should
-                be skipped. These datasets should be given with their file
-                extension.
+                Tuple of datasets which are problematic and should be skipped.
+                These datasets should be given with their file extension.
             dataset_parser: callable, default _edgelist_file_to_networkx_graph
                 Function which given a dataset file (e.g. data.dat) parses
                 it into an nx.Graph.
