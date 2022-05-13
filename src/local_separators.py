@@ -374,8 +374,8 @@ def split_at_local_cutvertices(G: nx.Graph, local_cutvertices: List[LocalCutvert
         graph: nx.Graph = G
     # Construct the dictionary that will give each split vertex the 'split' attribute.
     attr: Dict[Vertex, bool] = dict()
-    # Keep a set of all available local cutvertices.
-    lcv_vertices: Set[Vertex] = set(lcv.vertex for lcv in local_cutvertices)
+    # Keep a set of all previously split at local cutvertices.
+    lcv_vertices: Set[Vertex] = set()
     # Construct the split vertices using the edge-partition.
     lcv: LocalCutvertex
     for lcv in local_cutvertices:
@@ -407,6 +407,8 @@ def split_at_local_cutvertices(G: nx.Graph, local_cutvertices: List[LocalCutvert
             attr[split_vertex] = True
             # Increase the index.
             i += 1
+            # Add the current local cutvertex to the set of split at local cutvertices.
+            lcv_vertices.add(lcv.vertex)
     # Distinguish the split vertices.
     nx.set_node_attributes(graph, attr, name='split')
     # Return the graph if necessary.
