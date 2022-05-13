@@ -73,12 +73,12 @@ def _overwrite_guard(overwrite: bool):
                 print('Overwrite aborted!')
                 exit()
 
-def __pickle_Network_Neural_MJS20(overwrite: bool=False):
+def __pickle_Network_Data_MJS20(overwrite: bool=False):
     _overwrite_guard(overwrite)
     from .datasets import Network_Data_MJS20 as ND
     from .utils import seconds_to_string as sec2str
     import time
-    # Run routine to pickle Network_Neural_MJS20 dataset.
+    # Run routine to pickle Network_Data_MJS20 dataset.
     categories: List[str] = 'FoodWebs Genetic Language Metabolic Neural Social Trade'.split()
     datasets: List[List[nx.Graph]] = list(map(lambda x: ND[x], categories))
     total_start: float = time.perf_counter()
@@ -140,4 +140,4 @@ def __pickle_MajorOpenRoadNetworks(overwrite: bool=False):
 
 if __name__ == '__main__':
     overwrite: bool = False
-    __pickle_MajorOpenRoadNetworks(overwrite=overwrite)
+    __pickle_Network_Data_MJS20(overwrite=overwrite)
