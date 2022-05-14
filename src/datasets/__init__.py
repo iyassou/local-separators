@@ -155,7 +155,7 @@ class DatasetInterface:
         ### Determine the maximum cache size.
         # Find the number of datasets.
         num_datasets: int = sum(
-            dataset.name
+            1
             for ext in self.dataset_extensions
             for dataset in self.dataset_folder().rglob(f'*{ext}')
         )
