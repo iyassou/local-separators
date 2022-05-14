@@ -30,13 +30,13 @@ def parse_stackoverflow_dataset(file: Path) -> nx.Graph:
             line: str = myfile.readline().strip()
             while line:
                 # Parse line.
-                node, group, nodesize = line.split(b',')
+                node, group, node_size = line.split(b',')
                 group: int = int(group)
-                nodesize: float = float(nodesize) * 10.
+                node_size: float = float(node_size) * 10.
                 # Track group.
                 groups.add(group)
                 # Add node to graph.
-                G.add_node(node, group=group, nodesize=nodesize)
+                G.add_node(node, group=group, node_size=node_size)
                 # Read next line.
                 line: str = myfile.readline().strip()
         # Second the edges and their weights.
