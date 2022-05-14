@@ -52,9 +52,8 @@ def parse_infpower_dataset(file: Path) -> nx.Graph:
     return G
 
 _DATASET_EXTENSIONS: Set[str] = {'.mtx'}
-_PROBLEMATIC_DATASETS: Tuple[str] = ()
 infpower: DatasetInterface = DatasetInterface(
-    __file__, _DATASET_EXTENSIONS, _PROBLEMATIC_DATASETS, parse_infpower_dataset
+    __file__, _DATASET_EXTENSIONS, parse_infpower_dataset
 )
 
 sys.modules[__name__] = infpower

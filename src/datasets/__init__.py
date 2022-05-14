@@ -121,7 +121,6 @@ class DatasetInterface:
     def __init__(self,
                  file: str,
                  dataset_extensions: Set[str],
-                 problematic: Tuple[str],
                  dataset_parser: callable):
         '''
             Initialisation function.
@@ -132,9 +131,6 @@ class DatasetInterface:
                 Name of the subclass' file.
             dataset_extensions: Set[str]
                 Set of extensions that correspond to an individual dataset.
-            problematic: Tuple[str]
-                Tuple of datasets which are problematic and should be skipped.
-                These datasets should be given with their file extension.
             dataset_parser: callable, default _edgelist_file_to_networkx_graph
                 Function which given a dataset file (e.g. data.dat) parses
                 it into an nx.Graph.
@@ -148,20 +144,18 @@ class DatasetInterface:
             datasets are loaded when necessary and memory usage shouldn't
             be too bad.
             Cache size is the total number of datasets and the total number
-            of nested folders, minus the number of problematic datasets.
+            of nested folders.
         '''
         ### Store file.
         self.file = Path(file).stem
         ### Store dataset extensions.
         self.dataset_extensions: Set[str] = dataset_extensions
-        ### Store problematic datasets.
-        self.problematic: Tuple[str] = tuple(problematic)
         ### Store dataset parser.
         self.dataset_parser: callable = dataset_parser
         ### Determine the maximum cache size.
         # Find the number of datasets.
         num_datasets: int = sum(
-            dataset.name not in self.problematic
+            dataset.name
             for ext in self.dataset_extensions
             for dataset in self.dataset_folder().rglob(f'*{ext}')
         )
@@ -169,10 +163,8 @@ class DatasetInterface:
         num_folders: int = sum(
             x.is_dir() for x in self.dataset_folder().rglob('*')
         )
-        # Find the number of problematic datasets.
-        num_problematic: int = len(self.problematic)
         # Maximum cache size is then...
-        MAX_CACHE_SIZE: int = num_datasets + num_folders - num_problematic
+        MAX_CACHE_SIZE: int = num_datasets + num_folders
         ### Decorate the __getitem__ magic method.
         self.__getitem__ = lru_cache(maxsize=MAX_CACHE_SIZE)(self.__getitem__)
 
@@ -225,14 +217,12 @@ class DatasetInterface:
                         # [
                             {item.name: self[item.name]} if item.is_dir() else self.dataset_parser(item)
                             for item in filter(
-                                lambda x: x.is_dir() or x.suffix in self.dataset_extensions and x.name not in self.problematic,
+                                lambda x: x.is_dir() or x.suffix in self.dataset_extensions,
                                 knick_knack.iterdir()
                             )
                         # ]
                     )
                 elif knick_knack.suffix in self.dataset_extensions:
-                    if knick_knack.name in self.problematic:
-                        continue
                     all_datasets.append(self.dataset_parser(knick_knack))
             return all_datasets
         '''
@@ -253,14 +243,10 @@ class DatasetInterface:
                             { item.name: self[item.name] }
                         )
                     elif item.suffix in self.dataset_extensions:
-                        if item.name in self.problematic:
-                            continue
                         datasets.append(self[item.stem])
                 return datasets
             elif knick_knack.suffix in self.dataset_extensions:
                 # Not a directory, dealing with individual files here.
-                if knick_knack.name in self.problematic:
-                    continue
                 if knick_knack.stem == attr:
                     # Found the dataset.
                     return self.dataset_parser(knick_knack)

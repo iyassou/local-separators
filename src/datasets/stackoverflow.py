@@ -62,9 +62,8 @@ def parse_stackoverflow_dataset(file: Path) -> nx.Graph:
     return G
 
 _DATASET_EXTENSIONS: Set[str] = {'.zip'}
-_PROBLEMATIC_DATASETS: Tuple[str] = ()
 stackoverflow: DatasetInterface = DatasetInterface(
-    __file__, _DATASET_EXTENSIONS, _PROBLEMATIC_DATASETS, parse_stackoverflow_dataset
+    __file__, _DATASET_EXTENSIONS, parse_stackoverflow_dataset
 )
 
 sys.modules[__name__] = stackoverflow

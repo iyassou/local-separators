@@ -304,9 +304,8 @@ def parse_MajorOpenRoadNetwork_dataset(file: Path) -> nx.Graph:
     return G
 
 _DATASET_EXTENSIONS: Set[str] = {'.zip'}
-_PROBLEMATIC_DATASETS: Tuple[str] = ()
 MajorOpenRoadNetwork: DatasetInterface = DatasetInterface(
-    __file__, _DATASET_EXTENSIONS, _PROBLEMATIC_DATASETS, parse_MajorOpenRoadNetwork_dataset
+    __file__, _DATASET_EXTENSIONS, parse_MajorOpenRoadNetwork_dataset
 )
 
 sys.modules[__name__] = MajorOpenRoadNetwork
