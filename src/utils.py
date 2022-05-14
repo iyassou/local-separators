@@ -352,3 +352,6 @@ def polygon(N: int, r: float, centroid: Tuple[float, float]=None, rotate_degrees
     if centroid is not None:
         return (tuple(map(sum, zip(centroid, point(n)))) for n in range(N))
     return (point(n) for n in range(N))
+
+def latex_safe_string(s: str) -> str:
+    return escape_underscore(s).replace('#', '\#')
