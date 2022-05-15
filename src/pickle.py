@@ -138,6 +138,19 @@ def __pickle_MajorOpenRoadNetworks(overwrite: bool=False):
     end: float = time.perf_counter()
     print('Total pickling time:', sec2str(end - start, rounding=3))
 
+def __pickle_infpower(overwrite: bool=False):
+    _overwrite_guard(overwrite)
+    from .datasets import infpower
+    from .utils import seconds_to_string as sec2str
+    import time
+    # Run routine to pickle infpower dataset.
+    G: nx.Graph = infpower['inf-power']
+    print(f'[1/1] Pickling {G.name.name}...')
+    start: float = time.perf_counter()
+    pickle_local_separators(G, overwrite=overwrite)
+    end: float = time.perf_counter()
+    print('Total pickling time:', sec2str(end - start, rounding=3))
+
 if __name__ == '__main__':
     overwrite: bool = False
-    __pickle_stackoverflow(overwrite=overwrite)
+    __pickle_infpower(overwrite=overwrite)
