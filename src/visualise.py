@@ -225,7 +225,7 @@ def calculate_marker_sizes(ax: matplotlib.axes.Axes, pos: Dict[Vertex, Point2d],
     # Return the result.
     return nodelist, node_size
 
-def draw_graph(G: nx.Graph, pos: Dict[Vertex, Point2d], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, method: str='min', node_style: NodeStyle=None, edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
+def draw_graph(G: nx.Graph, pos: Dict[Vertex, Point2d], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, method: str='min', node_style: NodeStyle=None, edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True, ax=None):
     '''
         Function to draw a graph.
 
@@ -298,7 +298,10 @@ def draw_graph(G: nx.Graph, pos: Dict[Vertex, Point2d], data_axis_fudge: float=N
     if not overwrite and png.exists():
         return
     # Configure the matplotlib figure and axes.
-    fig, ax = plt.gcf(), plt.gca()
+    if ax is None:
+        fig, ax = plt.gcf(), plt.gca()
+    else:
+        fig = ax.get_figure()
     fig.set_size_inches(*fig_size)
     fig.set_dpi(dpi)
     # Obtain the bounding box.
@@ -329,7 +332,7 @@ def draw_graph(G: nx.Graph, pos: Dict[Vertex, Point2d], data_axis_fudge: float=N
     # Tighten the layout because there's only one subplot.
     plt.tight_layout()
     # Save PNG.
-    plt.savefig(png, dpi=dpi)
+    # plt.savefig(png, dpi=dpi)
 
 def draw_local_cutvertices(G: nx.Graph, pos: Dict[Vertex, Point2d], local_cutvertices: List[LocalCutvertex], data_axis_fudge: float=None, inter_node_distance_fraction: float=None, local_cutvertex_style: NodeStyle=None, ball_vertex_style: NodeStyle=None, node_style: NodeStyle=None, ball_edge_style: EdgeStyle=None, edge_style: EdgeStyle=None, fig_size: FigureSize=None, dpi: int=None, overwrite: bool=True):
     '''
