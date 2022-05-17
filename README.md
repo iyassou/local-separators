@@ -8,7 +8,7 @@ My masters thesis consisted of identifying local cutvertices in large networks. 
 
 ## What's inside?
 
-`datasets` holds the datasets I used in my thesis. `src` is where the interesting stuff resides. `src\local_separators.py` is the work horse that underpins this. `src/playground.py` is a large complicated mess of code snippets used for generating figures and trying stuff out in general.
+`datasets` holds the datasets I used in my thesis save for `roadNetCA`. `src` is where the interesting stuff resides. `src\local_separators.py` is the work horse that underpins this. `src/playground.py` is a large complicated mess of code snippets used for generating figures and trying stuff out in general.
 
 ## What's next?
 
