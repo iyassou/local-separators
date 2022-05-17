@@ -13,7 +13,7 @@ __pycache__/
 
 # Dataset extensions
 
-*.dat
+# *.dat
 
 # Unnecessary directories
 
