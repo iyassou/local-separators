@@ -584,7 +584,10 @@ def _interim_report_1_figure():
     plt.title(f'Graph $G$ with $2$-local cutvertex ${local_cutvertex}$ removed')
     plt.show()
 
-def w13_every_other_pair_of_spokes_removed(layout: callable):
+def w13_every_other_pair_of_spokes_removed():
+    node_size = 500
+    font_size = 16
+    width = 2
     hub = 0
     G: nx.Graph = __get_W13_special(hub=hub)
     matching_offset: float = 0.
@@ -593,11 +596,11 @@ def w13_every_other_pair_of_spokes_removed(layout: callable):
     pos[hub] = (0,0)
     fig, axes = plt.subplots(1, 2)
     ax = axes[0]
-    nx.draw_networkx(G, pos, with_labels=True, font_color='w', ax=ax)
+    nx.draw_networkx(G, pos, node_size=node_size, font_size=font_size, width=width, with_labels=True, font_color='w', ax=ax)
     ax.set_title('Graph $H$, isomorphic to $W^{12}$ with every other pair of spokes removed')
     ax = axes[1]
     B = ball(G, hub, 1.5)
-    nx.draw_networkx(B, pos, with_labels=True, font_color='w', ax=ax)
+    nx.draw_networkx(B, pos, node_size=node_size, font_size=font_size, width=width, with_labels=True, font_color='w', ax=ax)
     ax.set_title(f'Graph $H^\prime$, a copy of $B_H({hub},\\frac{{3}}{{2}})$')
     plt.show()
 
@@ -3018,7 +3021,7 @@ def stackoverflow_interesting_components(G: nx.Graph=None):
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> --- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 if __name__ == '__main__':
-    w13_every_other_pair_of_spokes_removed(nx.kamada_kawai_layout)
+    w13_every_other_pair_of_spokes_removed()
     exit()
     # MORN_SPLIT_COMPONENT_SIZES()
     # exit()
