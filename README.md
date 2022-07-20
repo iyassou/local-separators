@@ -10,9 +10,11 @@ My masters thesis consisted of identifying local cutvertices in large networks. 
 
 `datasets` holds the datasets I used in my thesis save for `roadNetCA`. `src` is where the interesting stuff resides. `src\local_separators.py` is the work horse that underpins this. `src/playground.py` is a large complicated mess of code snippets used for generating figures and trying stuff out in general.
 
+`masters-thesis.pdf` is the thesis I submitted, for which I received a first! 🥳
+
 ## What's next?
 
-As things stand, I've just submitted my thesis, and I intend on contributing to the improvements I mentioned in my conclusion in my spare time. These improvements are, in no particular order:
+As things stand, I intend on contributing to the improvements I mentioned in my conclusion in my spare time. These improvements are, in no particular order:
 
 - porting to a graph theory library that can handle larger graphs quicker
 - implementing a tree-like decomposition of a graph along its local cutvertices
